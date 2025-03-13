@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info, Sparkles, Send, RefreshCw, Wand2, BrainCircuit, CheckCheck, MessageSquare } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
 
@@ -11,8 +11,7 @@ import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
 interface Goal {
   id: string;
   title: string;
-  description?: string;
-  category?: string;
+  curation?: string;
   progress: number;
   status: 'active' | 'completed' | 'cancelled';
   startDate?: string;
@@ -55,14 +54,13 @@ export default function EnhancedGoalList() {
   const [creationStep, setCreationStep] = useState<CreationStep>('input');
   const [newGoal, setNewGoal] = useState<Partial<Goal>>({
     title: '',
-    description: '',
+    curation: '',
     progress: 0,
     status: 'active',
     tasks: [],
   });
   const [aiSuggestion, setAiSuggestion] = useState<string>('');
   const [needsAiHelp, setNeedsAiHelp] = useState<boolean | null>(null);
-  const [goalCategory, setGoalCategory] = useState<string>('');
   const [aiQuestionShown, setAiQuestionShown] = useState(false);
   
   // AI-specific states
@@ -74,6 +72,12 @@ export default function EnhancedGoalList() {
   const inputRef = useRef<HTMLInputElement>(null);
   const taskListRef = useRef<HTMLDivElement>(null);
 
+  // Task Curation相关状态
+  const [curationPrompt, setCurationPrompt] = useState('');
+  const [curationAIResponse, setCurationAIResponse] = useState<string | null>(null);
+  const [isCurationLoading, setIsCurationLoading] = useState(false);
+  const [suggestionType, setSuggestionType] = useState<'tasks' | null>(null);
+
   // Effects for AI suggestions
   useEffect(() => {
     if (newGoal.title && newGoal.title.length > 3 && !aiSuggestion) {
@@ -84,18 +88,21 @@ export default function EnhancedGoalList() {
       const goalText = newGoal.title.toLowerCase();
       
       // Initial category detection based on keywords
-      if (goalText.includes('workout') || goalText.includes('exercise') || goalText.includes('健身')) {
+      if (goalText.includes('workout') || goalText.includes('exercise') || 
+          goalText.includes('健身') || goalText.includes('瘦') || 
+          goalText.includes('减肥') || goalText.includes('weight loss')) {
         setAiSuggestion('fitness');
-        setGoalCategory('Health & Fitness');
+        console.log('AI suggestion set to fitness for input:', goalText);
       } else if (goalText.includes('work') || goalText.includes('job') || goalText.includes('找工作')) {
         setAiSuggestion('career');
-        setGoalCategory('Career');
+        console.log('AI suggestion set to career for input:', goalText);
       } else if (goalText.includes('learn') || goalText.includes('study') || goalText.includes('学习')) {
         setAiSuggestion('learning');
-        setGoalCategory('Education');
-      } else if (goalText.length > 10) {
-        // For other goals, set a generic suggestion after enough text
+        console.log('AI suggestion set to learning for input:', goalText);
+      } else {
+        // 对于所有其他输入，设置通用建议
         setAiSuggestion('general');
+        console.log('AI suggestion set to general for input:', goalText);
       }
     }
   }, [newGoal.title]);
@@ -106,7 +113,7 @@ export default function EnhancedGoalList() {
     setCreationStep('input');
     setNewGoal({
       title: '',
-      description: '',
+      curation: '',
       progress: 0,
       status: 'active',
       tasks: [],
@@ -166,7 +173,7 @@ export default function EnhancedGoalList() {
     
     try {
       console.log("Requesting AI analysis for goal:", newGoal.title);
-      const result = await analyzeGoal(newGoal.title, goalCategory || undefined);
+      const result = await analyzeGoal(newGoal.title);
       console.log("AI analysis result:", result);
       
       setAiAnalysisResult(result);
@@ -182,13 +189,9 @@ export default function EnhancedGoalList() {
       // Update the goal with AI-generated information
       setNewGoal(prev => ({
         ...prev,
-        category: result.category,
         tasks: generatedTasks,
         aiGenerated: true,
       }));
-      
-      // Update the category to match AI suggestion
-      setGoalCategory(result.category);
       
       // Move to task editing step
       setCreationStep('taskGeneration');
@@ -310,8 +313,7 @@ export default function EnhancedGoalList() {
   const saveNewGoal = () => {
     const finalGoal: Omit<Goal, 'id'> = {
       title: newGoal.title || 'Untitled Goal',
-      description: newGoal.description || '',
-      category: goalCategory || undefined,
+      curation: newGoal.curation || '',
       progress: 0,
       status: 'active',
       startDate: new Date().toISOString(),
@@ -324,6 +326,137 @@ export default function EnhancedGoalList() {
     
     // Reset creation flow
     toggleGoalCreation();
+  };
+
+  // 处理AI任务细化请求（仅在编辑模式下使用）
+  const handleCurationAIRequest = async (type: 'tasks') => {
+    if (!editingGoal) return;
+    
+    setSuggestionType('tasks');
+    setIsCurationLoading(true);
+    
+    try {
+      // 构建提示，专注于任务优化
+      const userFeedback = editingGoal.curation || '';
+      if (!userFeedback.trim()) {
+        throw new Error('请提供有关任务的反馈');
+      }
+      
+      const prompt = `我正在规划一个目标: "${editingGoal.title}"
+      
+当前的任务列表:
+${(editingGoal.tasks || []).map((t, i) => `${i+1}. ${t.title}${t.timeline ? ` (${t.timeline})` : ''}`).join('\n')}
+
+我对这些任务的反馈和希望改进的方面:
+${userFeedback}
+
+请根据我的反馈，对任务进行优化和调整。返回一个经过改进的任务列表，确保:
+1. 尊重我的原始意图
+2. 根据我的反馈完善任务描述
+3. 为每个任务提供更具体的时间安排(如"本周五前"、"每周二"等)
+4. 如果需要，拆分过于笼统的任务，或合并过于细碎的任务
+5. 可以酌情添加1-2个对完成目标可能有帮助的新任务
+
+返回的格式应为:
+- 改进后的任务1 (时间安排)
+- 改进后的任务2 (时间安排)
+...`;
+      
+      console.log('发送任务优化AI请求:', prompt);
+      
+      // 调用AI服务
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          options: {
+            temperature: 0.7,
+            maxTokens: 800,
+          }
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('AI服务请求失败');
+      }
+      
+      const data = await response.json();
+      console.log('AI任务优化响应:', data);
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // 设置AI响应
+      setCurationAIResponse(data.text);
+      
+    } catch (error) {
+      console.error('AI任务优化请求错误:', error);
+      setCurationAIResponse(
+        `AI请求过程中出现错误。请稍后再试。${error instanceof Error ? error.message : ''}`
+      );
+    } finally {
+      setIsCurationLoading(false);
+    }
+  };
+
+  // 应用AI任务优化建议（仅在编辑模式下使用）
+  const applyAISuggestion = () => {
+    if (!curationAIResponse || !editingGoal) return;
+    
+    // 尝试从AI响应中提取优化后的任务
+    const taskSuggestions = curationAIResponse
+      .split('\n')
+      .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
+      .map(line => {
+        // 尝试从建议中提取任务标题和时间安排
+        const taskLine = line.trim().replace(/^[-•]\s*/, '');
+        const timelineMatch = taskLine.match(/\s*\(([^)]+)\)\s*$/);
+        
+        let title = taskLine;
+        let timeline = undefined;
+        
+        // 如果有时间安排，提取它
+        if (timelineMatch) {
+          title = taskLine.replace(/\s*\([^)]+\)\s*$/, '').trim();
+          timeline = timelineMatch[1];
+        }
+        
+        return { title, timeline };
+      });
+    
+    if (taskSuggestions.length > 0) {
+      // 创建新的任务数组，保留任务ID如果与现有任务匹配
+      const updatedTasks = taskSuggestions.map((suggestion, index) => {
+        // 尝试匹配现有任务
+        const existingTask = editingGoal.tasks && index < editingGoal.tasks.length 
+          ? editingGoal.tasks[index] 
+          : null;
+        
+        return {
+          id: existingTask?.id || `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          title: suggestion.title,
+          timeline: suggestion.timeline,
+          completed: existingTask?.completed || false
+        };
+      });
+      
+      // 更新目标的任务
+      setEditingGoal({
+        ...editingGoal,
+        tasks: updatedTasks
+      });
+      
+      console.log('应用了AI优化的任务:', updatedTasks);
+      
+      // 清理状态
+      setCurationPrompt('');
+      setCurationAIResponse(null);
+      setSuggestionType(null);
+    }
   };
 
   return (
@@ -655,6 +788,14 @@ export default function EnhancedGoalList() {
                 </button>
               </div>
               
+              {/* 同步提示 */}
+              <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-700 border border-blue-100 mt-4">
+                <div className="flex items-center">
+                  <Info size={16} className="mr-2 flex-shrink-0" />
+                  <p>任务会自动同步到 All Tasks。编辑或添加任务后，点击保存按钮更新。</p>
+                </div>
+              </div>
+              
               <div className="flex justify-between mt-6">
                 <button
                   onClick={() => needsAiHelp ? setCreationStep('aiQuestion') : setCreationStep('input')}
@@ -782,8 +923,8 @@ export default function EnhancedGoalList() {
                 </div>
               </div>
               
-              {goal.description && (
-                <p className="text-gray-600 mb-3">{goal.description}</p>
+              {goal.curation && (
+                <p className="text-gray-600 mb-3 italic text-sm">{goal.curation}</p>
               )}
               
               {/* 只为未完成的目标显示进度条 */}
@@ -845,13 +986,7 @@ export default function EnhancedGoalList() {
                 </div>
               )}
               
-              <div className="flex justify-between items-center mt-4">
-                {goal.category && (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                    {goal.category}
-                  </span>
-                )}
-                
+              <div className="flex justify-end items-center mt-4">
                 {/* 完成按钮 */}
                 <button
                   className={`px-3 py-1 text-xs rounded-full ${
@@ -874,171 +1009,269 @@ export default function EnhancedGoalList() {
       
       {/* 编辑目标模态框 */}
       {editingGoal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Edit Goal</h2>
-            
-            <div className="space-y-4">
-              {/* 标题输入 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.title}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, title: e.target.value })}
-                  placeholder="Enter goal title"
-                  title="Goal title"
-                  aria-label="Goal title"
-                />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">Edit Goal</h3>
+                <button
+                  className="text-gray-500 hover:text-gray-700"
+                  onClick={() => setEditingGoal(null)}
+                  title="Close dialog"
+                  aria-label="Close dialog"
+                >
+                  <X size={24} />
+                </button>
               </div>
               
-              {/* 描述输入 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.description || ''}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, description: e.target.value })}
-                  placeholder="Enter goal description"
-                  title="Goal description"
-                  aria-label="Goal description"
-                />
-              </div>
-              
-              {/* 分类输入 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.category || ''}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, category: e.target.value })}
-                  placeholder="e.g. Health, Career, Personal"
-                />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="edit-goal-title">
+                    Goal Title
+                  </label>
+                  <input
+                    id="edit-goal-title"
+                    type="text"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editingGoal.title}
+                    onChange={(e) => setEditingGoal({ ...editingGoal, title: e.target.value})}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="edit-goal-curation">
+                    Task Curation & Refinement
+                  </label>
+                  
+                  <div className="border border-gray-200 rounded-md overflow-hidden">
+                    <div className="flex items-center bg-blue-50 px-3 py-2 border-b border-blue-200">
+                      <BrainCircuit size={16} className="text-blue-700 mr-2" />
+                      <span className="text-sm font-medium text-blue-700">AI-Assisted Task Refinement</span>
+                    </div>
+                    
+                    <div className="p-3 bg-white">
+                      <p className="text-sm text-gray-700 mb-3">
+                        Share your thoughts on how the current tasks could be improved. AI will help refine them based on your feedback.
+                      </p>
+                      
+                      <div className="relative mb-3">
+                        <textarea
+                          id="edit-goal-curation"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={editingGoal.curation || ''}
+                          onChange={(e) => setEditingGoal({...editingGoal, curation: e.target.value})}
+                          placeholder="Examples: 'Need more specific deadlines', 'Tasks are too vague', 'Break down task #2 into smaller steps', 'Add something about research'..."
+                          rows={3}
+                        />
+                      </div>
+                      
+                      {!isCurationLoading && !curationAIResponse && (
+                        <button
+                          type="button"
+                          onClick={() => handleCurationAIRequest('tasks')}
+                          disabled={!editingGoal.curation?.trim() || isCurationLoading}
+                          className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${
+                            !editingGoal.curation?.trim() || isCurationLoading
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          <Sparkles size={14} className="mr-1.5" />
+                          Refine Tasks with AI
+                        </button>
+                      )}
+                      
+                      {isCurationLoading && (
+                        <div className="flex items-center justify-center p-4 text-blue-600">
+                          <RefreshCw size={16} className="mr-2 animate-spin" />
+                          <span>AI is analyzing and improving your tasks...</span>
+                        </div>
+                      )}
+                      
+                      {curationAIResponse && (
+                        <>
+                          <div className="mb-3">
+                            <h4 className="text-sm font-medium text-gray-700 mb-1">
+                              Refined Task List:
+                            </h4>
+                            <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700 whitespace-pre-line">
+                              {curationAIResponse}
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCurationAIResponse(null);
+                                setCurationPrompt('');
+                              }}
+                              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                            >
+                              Dismiss
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={applyAISuggestion}
+                              className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                            >
+                              <Wand2 size={14} className="mr-1.5" />
+                              Apply Refinements
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <p className="text-xs text-gray-500 mt-1">
+                    Share your thoughts on how tasks could be improved, and AI will help refine them while respecting your intentions.
+                  </p>
+                </div>
+                
+                {/* AI Insights - shown when available */}
+                {aiAnalysisResult?.insights && (
+                  <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
+                    <div className="flex items-start gap-2">
+                      <span className="bg-blue-100 text-blue-800 rounded-full p-1 mt-0.5">
+                        <Target size={14} />
+                      </span>
+                      <div>
+                        <p className="font-medium text-blue-800">
+                          AI 见解
+                          {aiAnalysisResult.isSimulated && (
+                            <span className="ml-2 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                              模拟数据
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-gray-700 mt-1">{aiAnalysisResult.insights}</p>
+                        {aiAnalysisResult.isSimulated && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            注意: 这是模拟数据，DeepSeek API 连接出现问题(可能需要检查 API 密钥或账户余额)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tasks
+                  </label>
+                  <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
+                    {editingGoal.tasks && editingGoal.tasks.length > 0 ? (
+                      editingGoal.tasks.map((task, index) => (
+                        <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            onChange={(e) => {
+                              const updatedTasks = [...editingGoal.tasks!];
+                              updatedTasks[index] = { ...task, completed: e.target.checked };
+                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                            }}
+                            className="h-4 w-4 rounded border-gray-300"
+                            aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
+                            title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
+                          />
+                          <input
+                            type="text"
+                            value={task.title}
+                            onChange={(e) => {
+                              const updatedTasks = [...editingGoal.tasks!];
+                              updatedTasks[index] = { ...task, title: e.target.value };
+                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                            }}
+                            className="flex-1 px-2 py-1 border border-gray-200 rounded-md text-sm"
+                            placeholder="Enter task title"
+                            aria-label="Task title"
+                          />
+                          <button
+                            onClick={() => {
+                              const updatedTasks = [...editingGoal.tasks!];
+                              updatedTasks.splice(index, 1);
+                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                            }}
+                            className="text-red-500 hover:text-red-700"
+                            aria-label={`Remove task "${task.title || 'Untitled task'}"`}
+                            title="Remove task"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 text-sm text-center py-2">No tasks yet</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newTask: GoalTask = {
+                        id: `task-${Date.now()}`,
+                        title: '',
+                        completed: false
+                      };
+                      setEditingGoal({
+                        ...editingGoal,
+                        tasks: [...(editingGoal.tasks || []), newTask]
+                      });
+                    }}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <Plus size={14} className="mr-1" /> Add Task
+                  </button>
+                </div>
               </div>
               
               {/* 同步提示 */}
-              <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-700 border border-blue-100">
+              <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-700 border border-blue-100 mt-4">
                 <div className="flex items-center">
                   <Info size={16} className="mr-2 flex-shrink-0" />
                   <p>任务会自动同步到 All Tasks。编辑或添加任务后，点击保存按钮更新。</p>
                 </div>
               </div>
               
-              {/* 任务列表编辑 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tasks
-                </label>
-                <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
-                  {editingGoal.tasks && editingGoal.tasks.length > 0 ? (
-                    editingGoal.tasks.map((task, index) => (
-                      <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={(e) => {
-                            const updatedTasks = [...editingGoal.tasks!];
-                            updatedTasks[index] = { ...task, completed: e.target.checked };
-                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                          }}
-                          className="h-4 w-4 rounded border-gray-300"
-                          aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
-                          title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
-                        />
-                        <input
-                          type="text"
-                          value={task.title}
-                          onChange={(e) => {
-                            const updatedTasks = [...editingGoal.tasks!];
-                            updatedTasks[index] = { ...task, title: e.target.value };
-                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                          }}
-                          className="flex-1 px-2 py-1 border border-gray-200 rounded-md text-sm"
-                          placeholder="Enter task title"
-                          aria-label="Task title"
-                        />
-                        <button
-                          onClick={() => {
-                            const updatedTasks = [...editingGoal.tasks!];
-                            updatedTasks.splice(index, 1);
-                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                          }}
-                          className="text-red-500 hover:text-red-700"
-                          aria-label={`Remove task "${task.title || 'Untitled task'}"`}
-                          title="Remove task"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-sm text-center py-2">No tasks yet</p>
-                  )}
-                </div>
+              {/* 模态框按钮 */}
+              <div className="flex justify-end space-x-2 mt-6">
                 <button
-                  onClick={() => {
-                    const newTask: GoalTask = {
-                      id: `task-${Date.now()}`,
-                      title: '',
-                      completed: false
-                    };
-                    setEditingGoal({
-                      ...editingGoal,
-                      tasks: [...(editingGoal.tasks || []), newTask]
-                    });
-                  }}
-                  className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                  onClick={() => setEditingGoal(null)}
                 >
-                  <Plus size={14} className="mr-1" /> Add Task
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  onClick={() => {
+                    // 过滤掉空任务
+                    const filteredTasks = editingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
+                    
+                    // 计算新的进度
+                    let newProgress = editingGoal.progress;
+                    if (filteredTasks.length > 0) {
+                      const completedCount = filteredTasks.filter(t => t.completed).length;
+                      newProgress = completedCount / filteredTasks.length;
+                    }
+                    
+                    // 更新目标
+                    updateGoal(editingGoal.id, {
+                      ...editingGoal,
+                      tasks: filteredTasks,
+                      progress: newProgress
+                    });
+                    
+                    // 记录日志
+                    console.log('更新目标:', editingGoal.title, '任务数:', filteredTasks.length);
+                    
+                    // 关闭模态框
+                    setEditingGoal(null);
+                  }}
+                >
+                  Save
                 </button>
               </div>
-            </div>
-            
-            {/* 模态框按钮 */}
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                onClick={() => setEditingGoal(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                onClick={() => {
-                  // 过滤掉空任务
-                  const filteredTasks = editingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
-                  
-                  // 计算新的进度
-                  let newProgress = editingGoal.progress;
-                  if (filteredTasks.length > 0) {
-                    const completedCount = filteredTasks.filter(t => t.completed).length;
-                    newProgress = completedCount / filteredTasks.length;
-                  }
-                  
-                  // 更新目标
-                  updateGoal(editingGoal.id, {
-                    ...editingGoal,
-                    tasks: filteredTasks,
-                    progress: newProgress
-                  });
-                  
-                  // 记录日志
-                  console.log('更新目标:', editingGoal.title, '任务数:', filteredTasks.length);
-                  
-                  // 关闭模态框
-                  setEditingGoal(null);
-                }}
-              >
-                Save
-              </button>
             </div>
           </div>
         </div>

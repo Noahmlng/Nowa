@@ -29,7 +29,6 @@ export interface AIResponse {
 }
 
 export interface GoalAnalysisResult {
-  category: string;
   suggestedTasks: Array<{
     title: string;
     timeline?: string;
@@ -96,151 +95,144 @@ export async function getAICompletion(request: AIRequest): Promise<AIResponse> {
 }
 
 /**
- * Analyze a goal and suggest tasks and insights
+ * Analyze a goal and suggest tasks to achieve it
+ * 
+ * @param goalTitle The title of the goal to analyze
+ * @returns A promise that resolves to a GoalAnalysisResult
  */
-export async function analyzeGoal(goalTitle: string, category?: string): Promise<GoalAnalysisResult> {
-  console.log('Analyzing goal:', goalTitle, 'category:', category);
+export async function analyzeGoal(goalTitle: string): Promise<GoalAnalysisResult> {
+  console.log('Analyzing goal:', goalTitle);
   
-  const systemPrompt = `你是一个AI助手，擅长帮助用户分解目标为可执行的任务。
-分析用户的目标，并提供适当的任务建议和时间线。
-如果提供了类别，请根据该类别定制你的建议。
-在提供时间线时，请尽量具体，比如"本周内"、"下周五"、"下个月10号"等，这样更有助于用户设置明确的截止日期。`;
-  
-  const userPrompt = `目标: ${goalTitle}
-${category ? `类别: ${category}` : ''}
-
-请分析这个目标并提供:
-1. 适合这个目标的类别（健康、职业、教育等）
-2. 3-5个可行的任务，为每个任务提供明确的时间线（如"今天"、"本周内"、"下周一"、"本月底"等）
-3. 简短的见解或成功提示
-
-请使用以下JSON格式输出你的回答:
-{
-  "category": "string",
-  "suggestedTasks": [
-    {
-      "title": "string",
-      "timeline": "string"
-    }
-  ],
-  "insights": "string"
-}`;
-
   try {
-    // 创建 AI 请求
-    const aiResponse = await getAICompletion({
-      prompt: userPrompt,
-      options: {
-        temperature: 0.7,
-        maxTokens: 1000,
-        service: 'deepseek',
-      }
+    // 构建系统提示
+    const systemPrompt = `你是一个目标规划助手，帮助用户将大目标拆解为可执行的具体任务。
+请分析用户的目标，并提供以下内容：
+1. 对目标的简短见解（不超过2-3句话）
+2. 3-5个具体的任务建议，每个任务都应该：
+   - 明确具体，可执行
+   - 包含清晰的时间线描述（如"本周内"、"下周五前"、"下个月10号前"等）
+   - 有助于实现最终目标
+
+目标: ${goalTitle}
+`;
+    
+    // 构建用户提示
+    const userPrompt = `请帮我分析这个目标，并提供实用的任务建议。每个任务都需要有明确的时间线，比如"本周内"、"下周五前"、"每天"等具体时间描述。`;
+    
+    // 发送请求到 AI API
+    const response = await fetch(AI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemPrompt,
+        userPrompt,
+        format: {
+          "insights": "string",
+          "suggestedTasks": [
+            {
+              "title": "string",
+              "timeline": "string"
+            }
+          ]
+        }
+      }),
     });
     
-    // 检查错误
-    if (aiResponse.error) {
-      console.error('AI analysis error:', aiResponse.error);
-      throw new Error(aiResponse.error);
+    if (!response.ok) {
+      console.error('AI API error:', response.statusText);
+      return generateFallbackAnalysis(goalTitle);
     }
     
-    // 解析响应
-    console.log('AI raw response:', aiResponse.text);
+    const data = await response.json();
     
-    try {
-      // 尝试解析 JSON
-      const parsedResponse = JSON.parse(aiResponse.text) as GoalAnalysisResult;
-      // 保留模拟标志
-      parsedResponse.isSimulated = aiResponse.isSimulated || false;
-      return parsedResponse;
-    } catch (parseError) {
-      console.error('Error parsing AI response as JSON:', parseError);
-      console.log('Raw response that failed to parse:', aiResponse.text);
-      
-      // 如果无法解析 JSON，返回 fallback
-      return generateFallbackAnalysis(goalTitle, category);
+    if (data.error) {
+      console.error('AI API returned error:', data.error);
+      return generateFallbackAnalysis(goalTitle);
     }
+    
+    return {
+      ...data,
+      isSimulated: data.isSimulated || false
+    };
   } catch (error) {
     console.error('Error analyzing goal:', error);
-    
-    // 返回 fallback 结果
-    return generateFallbackAnalysis(goalTitle, category);
+    return generateFallbackAnalysis(goalTitle);
   }
 }
 
 /**
- * 当 API 调用失败时生成一个后备的分析结果
+ * Generate fallback analysis when the AI service is unavailable
  */
-function generateFallbackAnalysis(goalTitle: string, category?: string): GoalAnalysisResult {
+function generateFallbackAnalysis(goalTitle: string): GoalAnalysisResult {
   console.log('Generating fallback analysis for:', goalTitle);
   
-  // 基于关键词进行简单分类
+  // 根据目标标题中的关键词生成不同类型的任务
   const goalText = goalTitle.toLowerCase();
   
-  let result: GoalAnalysisResult;
-  
+  // 健身相关目标
   if (goalText.includes('健身') || 
-      goalText.includes('fitness') || 
-      goalText.includes('workout') ||
-      category?.toLowerCase().includes('health')) {
-    
-    result = {
-      category: 'Health & Fitness',
+      goalText.includes('workout') || 
+      goalText.includes('exercise') || 
+      goalText.includes('fitness')) {
+    return {
+      insights: '保持规律的锻炼习惯是实现健身目标的关键。建议将大目标分解为每周可执行的小任务，并逐步增加强度。',
       suggestedTasks: [
         { title: '制定每周健身计划', timeline: '本周内' },
-        { title: '每周进行3次力量训练', timeline: '周一/周三/周五' },
-        { title: '记录训练进度和体重变化', timeline: '每次训练后' },
-        { title: '调整饮食结构，增加蛋白质摄入', timeline: '持续进行' }
+        { title: '每周进行3次30分钟有氧运动', timeline: '每周一/三/五' },
+        { title: '每周进行2次力量训练', timeline: '每周二/四' },
+        { title: '记录每次锻炼数据和感受', timeline: '每次锻炼后' },
       ],
-      insights: '保持一致性比高强度更重要。开始时先适应规律训练，然后再逐步增加强度。'
-    };
-  } 
-  else if (goalText.includes('工作') || 
-           goalText.includes('job') || 
-           goalText.includes('career') ||
-           category?.toLowerCase().includes('career')) {
-    
-    result = {
-      category: 'Career',
-      suggestedTasks: [
-        { title: '更新简历和求职信模板', timeline: '本周内' },
-        { title: '每周申请10个职位', timeline: '每周' },
-        { title: '准备常见面试问题答案', timeline: '下两周' },
-        { title: '扩展专业网络，联系行业内人士', timeline: '本月' }
-      ],
-      insights: '质量优于数量。针对每个职位定制申请材料会比大量发送通用简历更有效。'
-    };
-  }
-  else if (goalText.includes('学习') || 
-           goalText.includes('学') || 
-           goalText.includes('study') ||
-           category?.toLowerCase().includes('education')) {
-    
-    result = {
-      category: 'Education',
-      suggestedTasks: [
-        { title: '制定学习计划和目标', timeline: '本周内' },
-        { title: '每天固定时间学习', timeline: '每天' },
-        { title: '完成一个实际项目或作业', timeline: '每周' },
-        { title: '定期复习已学内容', timeline: '每周日' }
-      ],
-      insights: '间隔重复学习法可以显著提高记忆效果。尝试教给别人你学到的知识，这是检验理解的好方法。'
-    };
-  }
-  else {
-    // 通用回应
-    result = {
-      category: 'Personal Development',
-      suggestedTasks: [
-        { title: '明确目标的具体成功标准', timeline: '本周' },
-        { title: '分解成每周可执行的小任务', timeline: '本周' },
-        { title: '安排定期检查进度的时间', timeline: '每周日' },
-        { title: '寻找相关资源或支持', timeline: '持续进行' }
-      ],
-      insights: '将大目标分解为小步骤，更容易保持动力和取得进展。设置明确的里程碑来庆祝进步。使用SMART原则（具体、可衡量、可实现、相关且有时限）来设计每个任务。'
+      isSimulated: true
     };
   }
   
-  // 标记为模拟数据
-  result.isSimulated = true;
-  return result;
+  // 职业相关目标
+  else if (goalText.includes('工作') || 
+      goalText.includes('职业') || 
+      goalText.includes('job') || 
+      goalText.includes('career')) {
+    return {
+      insights: '职业发展需要明确的方向和持续的学习。建议设定短期和长期目标，并定期评估进展。',
+      suggestedTasks: [
+        { title: '更新简历和LinkedIn档案', timeline: '本周内' },
+        { title: '每周申请5个符合目标的职位', timeline: '每周' },
+        { title: '参加行业线上研讨会或课程', timeline: '下两周内' },
+        { title: '与行业内3位专业人士建立联系', timeline: '本月内' },
+      ],
+      isSimulated: true
+    };
+  }
+  
+  // 学习相关目标
+  else if (goalText.includes('学习') || 
+      goalText.includes('学校') || 
+      goalText.includes('study') || 
+      goalText.includes('learn')) {
+    return {
+      insights: '有效的学习需要明确的计划和持续的实践。建议将学习内容分解为小模块，并设定具体的完成时间。',
+      suggestedTasks: [
+        { title: '制定详细的学习计划和时间表', timeline: '本周内' },
+        { title: '每天专注学习至少1小时', timeline: '每天' },
+        { title: '完成一个小型实践项目', timeline: '两周内' },
+        { title: '参加相关学习小组或论坛', timeline: '下周前' },
+      ],
+      isSimulated: true
+    };
+  }
+  
+  // 默认通用目标
+  else {
+    return {
+      insights: '实现目标需要明确的计划和持续的行动。建议将大目标分解为可管理的小任务，并设定具体的完成时间。',
+      suggestedTasks: [
+        { title: '制定详细的行动计划', timeline: '本周内' },
+        { title: '设定可衡量的阶段性目标', timeline: '下周前' },
+        { title: '每周回顾进展并调整计划', timeline: '每周日' },
+        { title: '寻找相关资源和支持', timeline: '持续进行' },
+      ],
+      isSimulated: true
+    };
+  }
 } 

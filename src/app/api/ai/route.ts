@@ -137,9 +137,6 @@ function simulateResponse(prompt: string) {
   
   if (prompt.toLowerCase().includes('goal')) {
     simulatedResponse = JSON.stringify({
-      category: prompt.toLowerCase().includes('健身') ? 'Health & Fitness' : 
-               prompt.toLowerCase().includes('工作') ? 'Career' :
-               'Personal Development',
       suggestedTasks: [
         { title: '制定详细计划', timeline: '本周内' },
         { title: '每周评估进度', timeline: '每周日' },

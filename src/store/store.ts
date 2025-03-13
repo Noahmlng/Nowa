@@ -36,8 +36,7 @@ interface GoalTask {
 interface Goal {
   id: string;                                      // Unique identifier for the goal
   title: string;                                   // Goal title
-  description?: string;                            // Optional goal description
-  category?: string;                               // Optional category for grouping goals
+  curation?: string;                               // Optional curation notes for tasks refinement
   progress: number;                                // Progress as a decimal between 0 and 1
   status: 'active' | 'completed' | 'cancelled';    // Goal status
   startDate?: string;                              // Optional start date (ISO string)

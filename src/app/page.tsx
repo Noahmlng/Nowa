@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { format } from 'date-fns';
 import TaskList from '@/components/TaskList';
-import GoalList from '@/components/GoalList';
 import EnhancedGoalList from '@/components/EnhancedGoalList';
 import Sidebar from '@/components/Sidebar';
 import { useAppStore } from '@/store/store';

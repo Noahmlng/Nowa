@@ -50,8 +50,7 @@ function createGoal({
     goalId,
     userId,
     title,
-    description = '',
-    category = null,
+    curation = '',
     progress = 0,
     status = 'active',
     startDate = null,
@@ -64,8 +63,7 @@ function createGoal({
       goal_id: goalId,         // Unique goal identifier
       user_id: userId,         // Associated user ID
       title: title,            // Goal title
-      description: description, // Goal description
-      category: category,      // Free-form tags (comma-separated)
+      curation: curation,      // Notes for task refinement and organization
       progress: progress,      // Goal progress (0 to 1)
       status: status,          // Goal status: 'active', 'completed', 'cancelled'
       start_date: startDate,   // Goal start date (optional)
