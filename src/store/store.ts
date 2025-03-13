@@ -18,6 +18,17 @@ interface Task {
 }
 
 /**
+ * GoalTask interface - Represents a task related to a goal
+ */
+interface GoalTask {
+  id: string;                                      // Unique identifier for the task
+  title: string;                                   // Task title
+  timeline?: string;                               // Optional timeline information (e.g., "March", "Week 1")
+  completed: boolean;                              // Whether the task is completed
+  description?: string;                            // Optional task description
+}
+
+/**
  * Goal interface - Represents a goal in the application
  * Based on the Goal model from models.js
  */
@@ -31,6 +42,8 @@ interface Goal {
   startDate?: string;                              // Optional start date (ISO string)
   endDate?: string;                                // Optional target end date (ISO string)
   finishDate?: string;                             // Optional actual completion date (ISO string)
+  tasks?: GoalTask[];                              // Optional array of tasks for this goal
+  aiGenerated?: boolean;                           // Whether the goal and tasks were generated with AI assistance
 }
 
 /**

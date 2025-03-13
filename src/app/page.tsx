@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { format } from 'date-fns';
 import TaskList from '@/components/TaskList';
 import GoalList from '@/components/GoalList';
+import EnhancedGoalList from '@/components/EnhancedGoalList';
 import Sidebar from '@/components/Sidebar';
 import { useAppStore } from '@/store/store';
 
@@ -23,6 +24,11 @@ export default function Home() {
     selectedList, 
     setSelectedList 
   } = useAppStore();
+
+  // Log for debugging
+  useEffect(() => {
+    console.log("Current selected list:", selectedList);
+  }, [selectedList]);
 
   return (
     <div className="flex h-screen">
@@ -46,10 +52,10 @@ export default function Home() {
             </h1>
           </header>
           
-          {/* Main content - conditionally render GoalList or TaskList */}
+          {/* Main content - conditionally render EnhancedGoalList or TaskList */}
           <main>
             {selectedList === 'goals' ? (
-              <GoalList />
+              <EnhancedGoalList />
             ) : (
               <TaskList filter={selectedList} />
             )}
