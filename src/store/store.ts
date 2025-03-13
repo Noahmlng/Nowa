@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { convertTimelineToDate } from '@/utils/dateUtils';
 
 /**
  * Task interface - Represents a task in the application
@@ -94,6 +95,13 @@ interface AppState {
  * 将 GoalTask 转换为 Task 的辅助函数
  */
 const goalTaskToTask = (goalTask: GoalTask, goalId: string): Omit<Task, 'id'> => {
+  // 将 timeline 描述转换为具体日期
+  const dueDate = goalTask.timeline 
+    ? convertTimelineToDate(goalTask.timeline)
+    : undefined;
+  
+  console.log(`Converting task "${goalTask.title}" with timeline "${goalTask.timeline}" to due date: ${dueDate}`);
+  
   return {
     title: goalTask.title,
     description: goalTask.description,
@@ -101,7 +109,7 @@ const goalTaskToTask = (goalTask: GoalTask, goalId: string): Omit<Task, 'id'> =>
     priority: 'medium',
     taskListId: 'all', // 添加到 All Tasks
     goalId: goalId, // 关联到对应目标
-    dueDate: goalTask.timeline ? new Date().toISOString() : undefined // 简单处理时间线
+    dueDate // 使用转换后的日期
   };
 };
 
