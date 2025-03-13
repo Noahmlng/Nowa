@@ -32,14 +32,34 @@ npm install
 yarn install
 ```
 
-3. Start the development server:
+3. Set up environment variables:
+```bash
+# Copy the environment template file
+cp .env.template .env.local
+
+# Edit .env.local and add your actual API keys
+nano .env.local
+# or use any text editor of your choice
+```
+
+4. Start the development server:
 ```bash
 npm run dev
 # or
 yarn dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+
+### Environment Variables
+
+The application requires the following environment variables:
+
+- `DEEPSEEK_API_KEY`: Your DeepSeek API key for AI functionality
+- `DEEPSEEK_API_URL`: The DeepSeek API endpoint (default: https://api.deepseek.com/v1/chat/completions)
+- `DEEPSEEK_MODEL`: The DeepSeek model to use (default: deepseek-chat)
+
+These should be set in a `.env.local` file which will not be committed to the repository for security reasons.
 
 ## Project Structure
 

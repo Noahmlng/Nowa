@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
+import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
 
 /**
  * Goal interface - Represents a goal in the application
@@ -64,16 +65,25 @@ export default function EnhancedGoalList() {
   const [goalCategory, setGoalCategory] = useState<string>('');
   const [aiQuestionShown, setAiQuestionShown] = useState(false);
   
+  // AI-specific states
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<GoalAnalysisResult | null>(null);
+  
   // References
   const inputRef = useRef<HTMLInputElement>(null);
   const taskListRef = useRef<HTMLDivElement>(null);
 
-  // Effects for AI suggestions (simulated)
+  // Effects for AI suggestions
   useEffect(() => {
     if (newGoal.title && newGoal.title.length > 3 && !aiSuggestion) {
-      // Simulate AI analyzing the goal
+      // Clear any previous AI errors
+      setAiError(null);
+      
+      // Simple keyword detection for immediate feedback
       const goalText = newGoal.title.toLowerCase();
       
+      // Initial category detection based on keywords
       if (goalText.includes('workout') || goalText.includes('exercise') || goalText.includes('健身')) {
         setAiSuggestion('fitness');
         setGoalCategory('Health & Fitness');
@@ -83,6 +93,9 @@ export default function EnhancedGoalList() {
       } else if (goalText.includes('learn') || goalText.includes('study') || goalText.includes('学习')) {
         setAiSuggestion('learning');
         setGoalCategory('Education');
+      } else if (goalText.length > 10) {
+        // For other goals, set a generic suggestion after enough text
+        setAiSuggestion('general');
       }
     }
   }, [newGoal.title]);
@@ -144,11 +157,61 @@ export default function EnhancedGoalList() {
     }
   };
 
+  // Request AI analysis of the goal
+  const requestAiAnalysis = async () => {
+    if (!newGoal.title) return;
+    
+    setIsAiLoading(true);
+    setAiError(null);
+    
+    try {
+      console.log("Requesting AI analysis for goal:", newGoal.title);
+      const result = await analyzeGoal(newGoal.title, goalCategory || undefined);
+      console.log("AI analysis result:", result);
+      
+      setAiAnalysisResult(result);
+      
+      // Automatically apply the AI suggestions
+      const generatedTasks: GoalTask[] = result.suggestedTasks.map((task, index) => ({
+        id: `task-${Date.now()}-${index}`,
+        title: task.title,
+        timeline: task.timeline,
+        completed: false
+      }));
+      
+      // Update the goal with AI-generated information
+      setNewGoal(prev => ({
+        ...prev,
+        category: result.category,
+        tasks: generatedTasks,
+        aiGenerated: true,
+      }));
+      
+      // Update the category to match AI suggestion
+      setGoalCategory(result.category);
+      
+      // Move to task editing step
+      setCreationStep('taskGeneration');
+    } catch (error) {
+      console.error("Error during AI analysis:", error);
+      setAiError(error instanceof Error ? error.message : "Failed to get AI recommendations");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   // Handle AI question response
   const handleAiQuestionResponse = (response: string) => {
     console.log("AI question response:", response);
     
-    // Generate tasks based on the response
+    // Set loading state
+    setIsAiLoading(true);
+    
+    // Generate tasks based on the response and goal category
+    let focusArea = response; // e.g., 'strength', 'endurance', 'applications', 'interview'
+    
+    // For predefined categories, we can use our hard-coded responses for now
+    // In the future, this could be replaced with a real AI call with the focus area as context
     let generatedTasks: GoalTask[] = [];
     
     if (aiSuggestion === 'fitness') {
@@ -180,6 +243,10 @@ export default function EnhancedGoalList() {
           { id: `task-${Date.now()}-3`, title: '研究目标公司背景', timeline: '每次面试前', completed: false },
         ];
       }
+    } else {
+      // For other categories, use the AI service to generate tasks
+      requestAiAnalysis();
+      return;
     }
     
     // Update goal with generated tasks
@@ -189,8 +256,12 @@ export default function EnhancedGoalList() {
       aiGenerated: true,
     }));
     
-    // Move to task editing step
-    setCreationStep('taskGeneration');
+    // Simulate a delay to show loading state
+    setTimeout(() => {
+      setIsAiLoading(false);
+      // Move to task editing step
+      setCreationStep('taskGeneration');
+    }, 800);
   };
 
   // Add a new task to the list
@@ -317,8 +388,9 @@ export default function EnhancedGoalList() {
                     {aiSuggestion === 'fitness' && "这是一个健身目标，想要添加具体的健身类型和衡量标准吗？"}
                     {aiSuggestion === 'career' && "这是一个职业目标，想要设定具体的申请数量或面试准备计划吗？"}
                     {aiSuggestion === 'learning' && "这是一个学习目标，想要设定具体的学习里程碑吗？"}
+                    {aiSuggestion === 'general' && "我们可以帮你拆解这个目标为可执行的任务和时间安排。"}
                     
-                    {needsAiHelp === null && (
+                    {needsAiHelp === null && !isAiLoading && (
                       <div className="mt-2 flex gap-2">
                         <button 
                           onClick={() => selectAiOption(true)}
@@ -336,10 +408,30 @@ export default function EnhancedGoalList() {
                         </button>
                       </div>
                     )}
+                    
+                    {isAiLoading && (
+                      <div className="mt-2 flex items-center text-blue-600">
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                        <span>AI 正在思考最佳方案...</span>
+                      </div>
+                    )}
+                    
+                    {aiError && (
+                      <div className="mt-2 text-red-500 flex items-center">
+                        <span>出现问题: {aiError}</span>
+                        <button 
+                          onClick={() => setAiError(null)}
+                          className="ml-2 text-xs underline"
+                        >
+                          重试
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 
-                {newGoal.title && newGoal.title.length > 3 && !aiSuggestion && (
+                {/* Show continue button if enough text is entered but no AI suggestion shown yet */}
+                {newGoal.title && newGoal.title.length > 3 && !aiSuggestion && !isAiLoading && (
                   <div className="flex justify-end mt-3">
                     <button 
                       onClick={() => selectAiOption(false)}
@@ -358,63 +450,104 @@ export default function EnhancedGoalList() {
           {creationStep === 'aiQuestion' && aiQuestionShown && (
             <div className="space-y-4">
               <div className="bg-blue-50 p-4 rounded-md">
-                <p className="text-sm text-gray-700 mb-3">
-                  {aiSuggestion === 'fitness' && "你更想提升哪一方面的健身能力？"}
-                  {aiSuggestion === 'career' && "在找工作过程中，你需要更多关注哪一方面？"}
-                  {aiSuggestion === 'learning' && "你学习的主要目的是什么？"}
-                </p>
+                {isAiLoading ? (
+                  <div className="flex flex-col items-center py-6 text-blue-600">
+                    <Loader2 size={30} className="animate-spin mb-3" />
+                    <p>AI 正在分析你的目标，生成任务建议...</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-700 mb-3">
+                      {aiSuggestion === 'fitness' && "你更想提升哪一方面的健身能力？"}
+                      {aiSuggestion === 'career' && "在找工作过程中，你需要更多关注哪一方面？"}
+                      {aiSuggestion === 'learning' && "你学习的主要目的是什么？"}
+                      {aiSuggestion === 'general' && "关于这个目标，你可以选择直接使用 AI 自动生成任务计划，或者回答更多问题来获得更精准的建议："}
+                    </p>
+                    
+                    {aiSuggestion === 'general' && (
+                      <div className="grid grid-cols-1 gap-3 mb-4">
+                        <button 
+                          onClick={() => requestAiAnalysis()}
+                          className="flex items-center gap-2 p-3 bg-blue-100 border border-blue-200 rounded-md hover:bg-blue-200 transition-colors text-left"
+                        >
+                          <span className="p-2 bg-blue-200 rounded-full">✨</span>
+                          <div>
+                            <p className="font-medium">直接生成任务计划</p>
+                            <p className="text-xs text-gray-600">AI 会根据你的目标自动创建任务列表和时间安排</p>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      {aiSuggestion === 'fitness' && (
+                        <>
+                          <button 
+                            onClick={() => handleAiQuestionResponse('strength')}
+                            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="p-2 bg-blue-100 rounded-full">💪</span>
+                            <div className="text-left">
+                              <p className="font-medium">力量训练</p>
+                              <p className="text-xs text-gray-500">增肌、提高最大重量</p>
+                            </div>
+                          </button>
+                          <button 
+                            onClick={() => handleAiQuestionResponse('endurance')}
+                            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="p-2 bg-green-100 rounded-full">🏃</span>
+                            <div className="text-left">
+                              <p className="font-medium">耐力训练</p>
+                              <p className="text-xs text-gray-500">心肺功能、跑步能力</p>
+                            </div>
+                          </button>
+                        </>
+                      )}
+                      
+                      {aiSuggestion === 'career' && (
+                        <>
+                          <button 
+                            onClick={() => handleAiQuestionResponse('applications')}
+                            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="p-2 bg-blue-100 rounded-full">📝</span>
+                            <div className="text-left">
+                              <p className="font-medium">求职申请</p>
+                              <p className="text-xs text-gray-500">简历优化、投递申请</p>
+                            </div>
+                          </button>
+                          <button 
+                            onClick={() => handleAiQuestionResponse('interview')}
+                            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="p-2 bg-orange-100 rounded-full">🎯</span>
+                            <div className="text-left">
+                              <p className="font-medium">面试准备</p>
+                              <p className="text-xs text-gray-500">面试技巧、模拟练习</p>
+                            </div>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
                 
-                <div className="grid grid-cols-2 gap-3">
-                  {aiSuggestion === 'fitness' && (
-                    <>
-                      <button 
-                        onClick={() => handleAiQuestionResponse('strength')}
-                        className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="p-2 bg-blue-100 rounded-full">💪</span>
-                        <div className="text-left">
-                          <p className="font-medium">力量训练</p>
-                          <p className="text-xs text-gray-500">增肌、提高最大重量</p>
-                        </div>
-                      </button>
-                      <button 
-                        onClick={() => handleAiQuestionResponse('endurance')}
-                        className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="p-2 bg-green-100 rounded-full">🏃</span>
-                        <div className="text-left">
-                          <p className="font-medium">耐力训练</p>
-                          <p className="text-xs text-gray-500">心肺功能、跑步能力</p>
-                        </div>
-                      </button>
-                    </>
-                  )}
-                  
-                  {aiSuggestion === 'career' && (
-                    <>
-                      <button 
-                        onClick={() => handleAiQuestionResponse('applications')}
-                        className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="p-2 bg-blue-100 rounded-full">📝</span>
-                        <div className="text-left">
-                          <p className="font-medium">求职申请</p>
-                          <p className="text-xs text-gray-500">简历优化、投递申请</p>
-                        </div>
-                      </button>
-                      <button 
-                        onClick={() => handleAiQuestionResponse('interview')}
-                        className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="p-2 bg-orange-100 rounded-full">🎯</span>
-                        <div className="text-left">
-                          <p className="font-medium">面试准备</p>
-                          <p className="text-xs text-gray-500">面试技巧、模拟练习</p>
-                        </div>
-                      </button>
-                    </>
-                  )}
-                </div>
+                {aiError && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-md text-red-600">
+                    <p className="font-medium">AI 分析过程中出现问题</p>
+                    <p className="text-sm mt-1">{aiError}</p>
+                    <button 
+                      onClick={() => {
+                        setAiError(null);
+                        requestAiAnalysis();
+                      }}
+                      className="mt-2 text-sm px-3 py-1 bg-white border border-red-200 rounded-md hover:bg-red-50"
+                    >
+                      重新尝试
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -434,6 +567,33 @@ export default function EnhancedGoalList() {
                   onChange={(e) => setNewGoal({...newGoal, title: e.target.value})}
                 />
               </div>
+              
+              {/* AI Insights - shown when available */}
+              {aiAnalysisResult?.insights && (
+                <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
+                  <div className="flex items-start gap-2">
+                    <span className="bg-blue-100 text-blue-800 rounded-full p-1 mt-0.5">
+                      <Target size={14} />
+                    </span>
+                    <div>
+                      <p className="font-medium text-blue-800">
+                        AI 见解
+                        {aiAnalysisResult.isSimulated && (
+                          <span className="ml-2 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                            模拟数据
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-gray-700 mt-1">{aiAnalysisResult.insights}</p>
+                      {aiAnalysisResult.isSimulated && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          注意: 这是模拟数据，DeepSeek API 连接出现问题(可能需要检查 API 密钥或账户余额)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
