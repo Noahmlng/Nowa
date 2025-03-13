@@ -19,6 +19,7 @@ interface Goal {
   finishDate?: string;
   tasks?: GoalTask[];
   aiGenerated?: boolean;
+  lastUpdated?: string;
 }
 
 /**
@@ -58,6 +59,7 @@ export default function EnhancedGoalList() {
     progress: 0,
     status: 'active',
     tasks: [],
+    lastUpdated: new Date().toISOString()
   });
   const [aiSuggestion, setAiSuggestion] = useState<string>('');
   const [needsAiHelp, setNeedsAiHelp] = useState<boolean | null>(null);
@@ -117,6 +119,7 @@ export default function EnhancedGoalList() {
       progress: 0,
       status: 'active',
       tasks: [],
+      lastUpdated: new Date().toISOString()
     });
     setAiSuggestion('');
     setNeedsAiHelp(null);
@@ -311,7 +314,8 @@ export default function EnhancedGoalList() {
 
   // Save the newly created goal
   const saveNewGoal = () => {
-    const finalGoal: Omit<Goal, 'id'> = {
+    // 使用as any类型断言处理lastUpdated字段
+    const finalGoal = {
       title: newGoal.title || 'Untitled Goal',
       curation: newGoal.curation || '',
       progress: 0,
@@ -319,7 +323,8 @@ export default function EnhancedGoalList() {
       startDate: new Date().toISOString(),
       tasks: newGoal.tasks?.filter(task => task.title.trim() !== '') || [],
       aiGenerated: needsAiHelp || false,
-    };
+      lastUpdated: new Date().toISOString() // 添加当前时间作为创建/更新时间
+    } as Omit<Goal, 'id'>;
     
     addGoal(finalGoal);
     console.log("Saving new goal:", finalGoal);
@@ -405,28 +410,67 @@ ${userFeedback}
 
   // 应用AI任务优化建议（仅在编辑模式下使用）
   const applyAISuggestion = () => {
-    if (!curationAIResponse || !editingGoal) return;
+    if (!curationAIResponse || !editingGoal) {
+      console.error('无法应用AI建议：缺少必要数据');
+      return;
+    }
     
-    // 尝试从AI响应中提取优化后的任务
-    const taskSuggestions = curationAIResponse
-      .split('\n')
-      .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
-      .map(line => {
-        // 尝试从建议中提取任务标题和时间安排
-        const taskLine = line.trim().replace(/^[-•]\s*/, '');
-        const timelineMatch = taskLine.match(/\s*\(([^)]+)\)\s*$/);
-        
-        let title = taskLine;
-        let timeline = undefined;
-        
-        // 如果有时间安排，提取它
-        if (timelineMatch) {
-          title = taskLine.replace(/\s*\([^)]+\)\s*$/, '').trim();
-          timeline = timelineMatch[1];
+    console.log('开始应用AI优化建议...');
+    
+    let taskSuggestions: {title: string, timeline?: string}[] = [];
+    
+    // 尝试解析不同格式的AI响应
+    try {
+      // 首先尝试解析为JSON
+      try {
+        // 检测可能的JSON响应 (可能是完整JSON或包含JSON的文本)
+        const jsonMatch = curationAIResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const jsonStr = jsonMatch[0];
+          const jsonData = JSON.parse(jsonStr);
+          
+          if (Array.isArray(jsonData)) {
+            console.log('检测到JSON格式的任务数据');
+            taskSuggestions = jsonData.map(item => {
+              return {
+                title: item.任务 || item.title || '',
+                timeline: item.时间安排 || item.timeline || ''
+              };
+            });
+          }
         }
-        
-        return { title, timeline };
-      });
+      } catch (jsonError) {
+        console.log('JSON解析失败，尝试其他格式', jsonError);
+      }
+      
+      // 如果JSON解析失败或没有找到有效任务，尝试解析列表格式
+      if (taskSuggestions.length === 0) {
+        console.log('尝试解析列表格式的任务');
+        taskSuggestions = curationAIResponse
+          .split('\n')
+          .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
+          .map(line => {
+            // 尝试从建议中提取任务标题和时间安排
+            const taskLine = line.trim().replace(/^[-•]\s*/, '');
+            const timelineMatch = taskLine.match(/\s*\(([^)]+)\)\s*$/);
+            
+            let title = taskLine;
+            let timeline = undefined;
+            
+            // 如果有时间安排，提取它
+            if (timelineMatch) {
+              title = taskLine.replace(/\s*\([^)]+\)\s*$/, '').trim();
+              timeline = timelineMatch[1];
+            }
+            
+            return { title, timeline };
+          });
+      }
+    } catch (error) {
+      console.error('解析AI响应失败:', error);
+    }
+    
+    console.log('从AI响应中提取的任务建议:', taskSuggestions);
     
     if (taskSuggestions.length > 0) {
       // 创建新的任务数组，保留任务ID如果与现有任务匹配
@@ -437,25 +481,85 @@ ${userFeedback}
           : null;
         
         return {
-          id: existingTask?.id || `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          id: existingTask?.id || `task-${Date.now()}-${index}`,
           title: suggestion.title,
           timeline: suggestion.timeline,
-          completed: existingTask?.completed || false
+          completed: existingTask?.completed || false,
+          description: existingTask?.description || ''
         };
       });
       
-      // 更新目标的任务
-      setEditingGoal({
-        ...editingGoal,
-        tasks: updatedTasks
-      });
+      console.log('更新后的任务列表:', updatedTasks);
       
-      console.log('应用了AI优化的任务:', updatedTasks);
+      // 计算新的进度
+      const completedCount = updatedTasks.filter(t => t.completed).length;
+      const newProgress = updatedTasks.length > 0 ? completedCount / updatedTasks.length : 0;
       
-      // 清理状态
-      setCurationPrompt('');
+      // 更新目标的最后修改时间
+      const now = new Date();
+      const lastUpdatedTime = now.toISOString();
+      
+      // 先清理AI响应状态，避免界面混乱
       setCurationAIResponse(null);
+      setCurationPrompt('');
       setSuggestionType(null);
+      
+      // 先显示加载状态
+      setIsCurationLoading(true);
+      
+      // 短暂延迟后更新任务列表，让用户看到加载过程
+      setTimeout(() => {
+        // 更新本地编辑状态，使用类型断言
+        const updatedGoal = {
+          ...editingGoal,
+          tasks: updatedTasks,
+          progress: newProgress,
+          lastUpdated: lastUpdatedTime
+        };
+        setEditingGoal(updatedGoal as Goal);
+        
+        // 结束加载状态
+        setIsCurationLoading(false);
+        
+        // 立即更新全局状态，以便在保存时不会丢失变更
+        updateGoal(editingGoal.id, {
+          tasks: updatedTasks,
+          progress: newProgress,
+          lastUpdated: lastUpdatedTime
+        } as Partial<Goal>);
+        
+        console.log('AI优化任务已应用，更新后的任务数:', updatedTasks.length);
+      }, 300);
+    } else {
+      console.warn('未从AI响应中提取到任何任务建议');
+      // 显示提示
+      setCurationAIResponse(curationAIResponse + "\n\n无法提取有效的任务建议，请检查AI响应格式。\n\n支持的格式：\n1. 列表格式（每行以'-'或'•'开头）\n2. JSON格式（包含任务和时间安排字段）");
+    }
+  };
+
+  // 添加格式化时间的辅助函数
+  const formatLastUpdated = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      
+      // 如果是今天
+      if (date.toDateString() === now.toDateString()) {
+        return `今天 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      }
+      
+      // 如果是昨天
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (date.toDateString() === yesterday.toDateString()) {
+        return `昨天 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      }
+      
+      // 其他日期
+      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    } catch (error) {
+      console.error('格式化日期时出错:', error);
+      return dateString;
     }
   };
 
@@ -923,8 +1027,10 @@ ${userFeedback}
                 </div>
               </div>
               
-              {goal.curation && (
-                <p className="text-gray-600 mb-3 italic text-sm">{goal.curation}</p>
+              {(goal as any).lastUpdated && (
+                <p className="text-gray-500 text-xs mb-3">
+                  最后更新: {formatLastUpdated((goal as any).lastUpdated)}
+                </p>
               )}
               
               {/* 只为未完成的目标显示进度条 */}
@@ -1040,18 +1146,18 @@ ${userFeedback}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="edit-goal-curation">
-                    Task Curation & Refinement
+                    任务细化与优化
                   </label>
                   
                   <div className="border border-gray-200 rounded-md overflow-hidden">
                     <div className="flex items-center bg-blue-50 px-3 py-2 border-b border-blue-200">
                       <BrainCircuit size={16} className="text-blue-700 mr-2" />
-                      <span className="text-sm font-medium text-blue-700">AI-Assisted Task Refinement</span>
+                      <span className="text-sm font-medium text-blue-700">AI辅助任务优化</span>
                     </div>
                     
                     <div className="p-3 bg-white">
                       <p className="text-sm text-gray-700 mb-3">
-                        Share your thoughts on how the current tasks could be improved. AI will help refine them based on your feedback.
+                        分享你对当前任务如何改进的想法，AI将根据你的反馈帮助优化任务。
                       </p>
                       
                       <div className="relative mb-3">
@@ -1060,7 +1166,7 @@ ${userFeedback}
                           className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           value={editingGoal.curation || ''}
                           onChange={(e) => setEditingGoal({...editingGoal, curation: e.target.value})}
-                          placeholder="Examples: 'Need more specific deadlines', 'Tasks are too vague', 'Break down task #2 into smaller steps', 'Add something about research'..."
+                          placeholder="例如: '需要更具体的截止日期'，'任务描述太模糊'，'将任务2拆分成更小的步骤'，'添加有关研究的内容'..."
                           rows={3}
                         />
                       </div>
@@ -1077,23 +1183,23 @@ ${userFeedback}
                           }`}
                         >
                           <Sparkles size={14} className="mr-1.5" />
-                          Refine Tasks with AI
+                          用AI优化任务
                         </button>
                       )}
                       
                       {isCurationLoading && (
                         <div className="flex items-center justify-center p-4 text-blue-600">
                           <RefreshCw size={16} className="mr-2 animate-spin" />
-                          <span>AI is analyzing and improving your tasks...</span>
+                          <span>AI正在分析并优化你的任务...</span>
                         </div>
                       )}
                       
                       {curationAIResponse && (
                         <>
                           <div className="mb-3">
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">
-                              Refined Task List:
-                            </h4>
+                            <div className="text-sm font-medium text-gray-700 mb-1">
+                              优化后的任务列表:
+                            </div>
                             <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700 whitespace-pre-line">
                               {curationAIResponse}
                             </div>
@@ -1108,7 +1214,7 @@ ${userFeedback}
                               }}
                               className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
                             >
-                              Dismiss
+                              取消
                             </button>
                             
                             <button
@@ -1117,7 +1223,7 @@ ${userFeedback}
                               className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
                             >
                               <Wand2 size={14} className="mr-1.5" />
-                              Apply Refinements
+                              应用建议
                             </button>
                           </div>
                         </>
@@ -1126,7 +1232,7 @@ ${userFeedback}
                   </div>
                   
                   <p className="text-xs text-gray-500 mt-1">
-                    Share your thoughts on how tasks could be improved, and AI will help refine them while respecting your intentions.
+                    分享你对任务优化的想法，AI将帮助改进任务，同时尊重你的原始意图。
                   </p>
                 </div>
                 
@@ -1159,12 +1265,15 @@ ${userFeedback}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tasks
+                    Tasks {editingGoal?.tasks && editingGoal.tasks.length > 0 ? `(${editingGoal.tasks.length})` : ''}
                   </label>
-                  <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
-                    {editingGoal.tasks && editingGoal.tasks.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
+                    {editingGoal?.tasks && editingGoal.tasks.length > 0 ? (
                       editingGoal.tasks.map((task, index) => (
-                        <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
+                        <div 
+                          key={`${task.id}-${index}`} 
+                          className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                        >
                           <input
                             type="checkbox"
                             checked={task.completed}
@@ -1172,28 +1281,39 @@ ${userFeedback}
                               const updatedTasks = [...editingGoal.tasks!];
                               updatedTasks[index] = { ...task, completed: e.target.checked };
                               setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                              console.log('任务状态已更新:', updatedTasks);
                             }}
                             className="h-4 w-4 rounded border-gray-300"
                             aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
                             title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
                           />
-                          <input
-                            type="text"
-                            value={task.title}
-                            onChange={(e) => {
-                              const updatedTasks = [...editingGoal.tasks!];
-                              updatedTasks[index] = { ...task, title: e.target.value };
-                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                            }}
-                            className="flex-1 px-2 py-1 border border-gray-200 rounded-md text-sm"
-                            placeholder="Enter task title"
-                            aria-label="Task title"
-                          />
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={task.title}
+                              onChange={(e) => {
+                                const updatedTasks = [...editingGoal.tasks!];
+                                updatedTasks[index] = { ...task, title: e.target.value };
+                                setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                                console.log('任务标题已更新:', updatedTasks);
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded-md text-sm"
+                              placeholder="Enter task title"
+                              aria-label="Task title"
+                            />
+                            {task.timeline && (
+                              <div className="flex items-center text-xs text-gray-500 mt-1">
+                                <Clock size={12} className="mr-1" />
+                                <span>{task.timeline}</span>
+                              </div>
+                            )}
+                          </div>
                           <button
                             onClick={() => {
                               const updatedTasks = [...editingGoal.tasks!];
                               updatedTasks.splice(index, 1);
                               setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                              console.log('任务已删除:', updatedTasks);
                             }}
                             className="text-red-500 hover:text-red-700"
                             aria-label={`Remove task "${task.title || 'Untitled task'}"`}
@@ -1204,25 +1324,39 @@ ${userFeedback}
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm text-center py-2">No tasks yet</p>
+                      <p className="text-gray-500 text-sm text-center py-4">
+                        {isCurationLoading ? "正在更新任务..." : "暂无任务，请添加或使用AI生成"}
+                      </p>
                     )}
                   </div>
-                  <button
-                    onClick={() => {
-                      const newTask: GoalTask = {
-                        id: `task-${Date.now()}`,
-                        title: '',
-                        completed: false
-                      };
-                      setEditingGoal({
-                        ...editingGoal,
-                        tasks: [...(editingGoal.tasks || []), newTask]
-                      });
-                    }}
-                    className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                  >
-                    <Plus size={14} className="mr-1" /> Add Task
-                  </button>
+                  <div className="mt-2 flex justify-between items-center">
+                    <button
+                      onClick={() => {
+                        const newTask: GoalTask = {
+                          id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                          title: '',
+                          completed: false
+                        };
+                        setEditingGoal({
+                          ...editingGoal,
+                          tasks: [...(editingGoal.tasks || []), newTask]
+                        });
+                        console.log('新任务已添加');
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                    >
+                      <Plus size={14} className="mr-1" /> 添加任务
+                    </button>
+                    
+                    {curationAIResponse && (
+                      <button
+                        onClick={applyAISuggestion}
+                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                      >
+                        <Wand2 size={14} className="mr-1" /> 应用当前的AI建议
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -1245,25 +1379,31 @@ ${userFeedback}
                 <button
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   onClick={() => {
+                    // 确保使用最新的编辑状态
+                    const currentEditingGoal = {...editingGoal};
+                    
                     // 过滤掉空任务
-                    const filteredTasks = editingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
+                    const filteredTasks = currentEditingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
+                    
+                    console.log('保存前的任务列表:', filteredTasks);
                     
                     // 计算新的进度
-                    let newProgress = editingGoal.progress;
+                    let newProgress = currentEditingGoal.progress;
                     if (filteredTasks.length > 0) {
                       const completedCount = filteredTasks.filter(t => t.completed).length;
                       newProgress = completedCount / filteredTasks.length;
                     }
                     
                     // 更新目标
-                    updateGoal(editingGoal.id, {
-                      ...editingGoal,
+                    updateGoal(currentEditingGoal.id, {
+                      ...currentEditingGoal,
                       tasks: filteredTasks,
-                      progress: newProgress
-                    });
+                      progress: newProgress,
+                      lastUpdated: new Date().toISOString() // 添加更新时间戳
+                    } as Partial<Goal>);
                     
                     // 记录日志
-                    console.log('更新目标:', editingGoal.title, '任务数:', filteredTasks.length);
+                    console.log('更新目标:', currentEditingGoal.title, '任务数:', filteredTasks.length);
                     
                     // 关闭模态框
                     setEditingGoal(null);
