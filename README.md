@@ -21,7 +21,7 @@ Nowa is an AI-powered todo app that helps you manage your tasks and goals. It's 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/nowa.git
+git clone https://github.com/diangao/Nowa.git
 cd nowa
 ```
 
@@ -81,4 +81,4 @@ nowa/
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
