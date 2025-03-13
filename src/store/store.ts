@@ -85,7 +85,25 @@ interface AppState {
   
   // UI state
   setSelectedList: (listId: string) => void;       // Change the currently selected list
+  
+  // 新增：将目标任务同步到任务库
+  syncGoalTasksToTaskLibrary: (goalId: string) => void; // 将指定目标的任务同步到任务库
 }
+
+/**
+ * 将 GoalTask 转换为 Task 的辅助函数
+ */
+const goalTaskToTask = (goalTask: GoalTask, goalId: string): Omit<Task, 'id'> => {
+  return {
+    title: goalTask.title,
+    description: goalTask.description,
+    status: goalTask.completed ? 'completed' : 'pending',
+    priority: 'medium',
+    taskListId: 'all', // 添加到 All Tasks
+    goalId: goalId, // 关联到对应目标
+    dueDate: goalTask.timeline ? new Date().toISOString() : undefined // 简单处理时间线
+  };
+};
 
 /**
  * Main application store using Zustand
@@ -93,7 +111,7 @@ interface AppState {
  */
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Initial state
       tasks: [],
       goals: [],
@@ -104,10 +122,13 @@ export const useAppStore = create<AppState>()(
       selectedList: 'today',
       
       // Task actions implementation
-      addTask: (task) => 
+      addTask: (task) => {
+        // 打印日志以便调试
+        console.log('Adding task:', task);
         set((state) => ({ 
-          tasks: [...state.tasks, { ...task, id: `task-${Date.now()}` }] 
-        })),
+          tasks: [...state.tasks, { ...task, id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` }] 
+        }));
+      },
       
       updateTask: (id, updatedTask) => 
         set((state) => ({ 
@@ -142,22 +163,110 @@ export const useAppStore = create<AppState>()(
           ) 
         })),
       
-      // Goal actions implementation
-      addGoal: (goal) => 
-        set((state) => ({ 
-          goals: [...state.goals, { ...goal, id: `goal-${Date.now()}` }] 
-        })),
+      // 新增：将目标任务同步到任务库
+      syncGoalTasksToTaskLibrary: (goalId) => {
+        const { goals, tasks, addTask, updateTask } = get();
+        const goal = goals.find(g => g.id === goalId);
+        
+        if (!goal || !goal.tasks || goal.tasks.length === 0) return;
+        
+        console.log(`Syncing ${goal.tasks.length} tasks from goal ${goalId} to task library`);
+        
+        // 获取现有的关联到此目标的任务
+        const existingTasksForGoal = tasks.filter(t => t.goalId === goalId);
+        
+        goal.tasks.forEach(goalTask => {
+          // 检查是否已存在匹配此 goalTask 的任务
+          const existingTask = existingTasksForGoal.find(t => t.title === goalTask.title);
+          
+          if (existingTask) {
+            // 如果任务已存在，更新其状态以匹配 goalTask
+            updateTask(existingTask.id, {
+              status: goalTask.completed ? 'completed' : 'pending',
+              description: goalTask.description
+            });
+            console.log(`Updated existing task: ${existingTask.id} - ${goalTask.title}`);
+          } else {
+            // 否则创建新任务
+            const newTask = goalTaskToTask(goalTask, goalId);
+            addTask(newTask);
+            console.log(`Added new task from goal: ${goalTask.title}`);
+          }
+        });
+      },
       
-      updateGoal: (id, updatedGoal) => 
+      // Goal actions implementation
+      addGoal: (goal) => {
+        const newGoalId = `goal-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        const newGoal: Goal = { 
+          ...goal, 
+          id: newGoalId,
+          // 确保必需字段有默认值
+          progress: goal.progress ?? 0,
+          status: goal.status ?? 'active'
+        };
+        
+        set((state) => ({ goals: [...state.goals, newGoal] }));
+        
+        // 如果目标有任务，将它们同步到任务库
+        if (newGoal.tasks && newGoal.tasks.length > 0) {
+          console.log(`目标 "${newGoal.title}" 包含 ${newGoal.tasks.length} 个任务，正在同步到 All Tasks...`);
+          
+          const { addTask } = get();
+          
+          newGoal.tasks.forEach(goalTask => {
+            // 只处理有标题的任务
+            if (goalTask.title.trim() === '') return;
+            
+            // 将 GoalTask 转换为 Task
+            const newTask = goalTaskToTask(goalTask, newGoalId);
+            addTask(newTask);
+            console.log(`- 已添加任务: "${goalTask.title}"`);
+          });
+        }
+      },
+      
+      updateGoal: (id, updatedGoal) => {
+        const currentGoal = get().goals.find(goal => goal.id === id);
+        if (!currentGoal) {
+          console.log(`找不到 ID 为 ${id} 的目标，无法更新`);
+          return;
+        }
+        
+        console.log(`更新目标: ${id} - ${currentGoal.title}`);
+        console.log('更新内容:', updatedGoal);
+        
+        const newGoal = { ...currentGoal, ...updatedGoal };
+        
         set((state) => ({ 
           goals: state.goals.map(goal => 
-            goal.id === id ? { ...goal, ...updatedGoal } : goal
+            goal.id === id ? newGoal : goal
           ) 
-        })),
+        }));
+        
+        // 如果更新了目标状态为完成，则更新所有关联任务
+        if (updatedGoal.status === 'completed') {
+          const { tasks, updateTask } = get();
+          tasks.forEach(task => {
+            if (task.goalId === id && task.status !== 'completed') {
+              updateTask(task.id, { status: 'completed' });
+              console.log(`目标完成，更新关联任务状态: ${task.id} - ${task.title}`);
+            }
+          });
+        }
+        
+        // 如果更新了目标的任务列表，同步到任务库
+        if (updatedGoal.tasks) {
+          const { syncGoalTasksToTaskLibrary } = get();
+          syncGoalTasksToTaskLibrary(id);
+        }
+      },
       
       deleteGoal: (id) => 
         set((state) => ({ 
-          goals: state.goals.filter(goal => goal.id !== id) 
+          goals: state.goals.filter(goal => goal.id !== id),
+          // 同时删除与此目标关联的所有任务
+          tasks: state.tasks.filter(task => task.goalId !== id)
         })),
       
       updateGoalProgress: (id, progress) => 

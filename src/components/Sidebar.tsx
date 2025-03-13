@@ -39,9 +39,9 @@ export default function Sidebar({ selectedList, setSelectedList }: SidebarProps)
    */
   const defaultLists = [
     { id: 'today', name: 'Today', icon: <Calendar size={20} /> },
+    { id: 'goals', name: 'My Goals', icon: <Target size={20} /> },
     { id: 'all', name: 'All Tasks', icon: <ListTodo size={20} /> },
     { id: 'completed', name: 'Completed', icon: <CheckCircle2 size={20} /> },
-    { id: 'goals', name: 'My Goals', icon: <Target size={20} /> },
   ];
 
   /**

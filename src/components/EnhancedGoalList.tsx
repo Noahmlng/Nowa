@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
 
@@ -751,10 +751,19 @@ export default function EnhancedGoalList() {
           goals.map(goal => (
             <div 
               key={goal.id} 
-              className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow"
+              className={`border rounded-lg p-4 bg-white hover:shadow-md transition-shadow ${
+                goal.status === 'completed' ? 'border-green-200 bg-green-50' : 'border-gray-200'
+              }`}
             >
               <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-medium">{goal.title}</h3>
+                <h3 className={`text-lg font-medium ${goal.status === 'completed' ? 'text-green-700' : ''}`}>
+                  {goal.title}
+                  {goal.status === 'completed' && (
+                    <span className="ml-2 inline-flex items-center text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                      <CheckCircle2 size={12} className="mr-1" /> Completed
+                    </span>
+                  )}
+                </h3>
                 <div className="flex space-x-1">
                   <button
                     className="p-1 text-gray-400 hover:text-blue-600"
@@ -777,39 +786,61 @@ export default function EnhancedGoalList() {
                 <p className="text-gray-600 mb-3">{goal.description}</p>
               )}
               
-              <div className="mb-2">
-                <div className="flex justify-between text-sm text-gray-500 mb-1">
-                  <span>Progress</span>
-                  <span>{Math.round(goal.progress * 100)}%</span>
+              {/* 只为未完成的目标显示进度条 */}
+              {goal.status !== 'completed' && (
+                <div className="mb-2">
+                  <div className="flex justify-between text-sm text-gray-500 mb-1">
+                    <span>Progress</span>
+                    <span>{Math.round(goal.progress * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full" 
+                      style={{ width: `${goal.progress * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-blue-600 h-2.5 rounded-full" 
-                    style={{ width: `${goal.progress * 100}%` }}
-                  ></div>
-                </div>
-              </div>
+              )}
               
               {/* Display tasks if available */}
               {goal.tasks && goal.tasks.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="text-sm font-medium text-gray-700 mb-2">Tasks:</div>
                   <div className="space-y-1">
-                    {goal.tasks.slice(0, 3).map(task => (
+                    {goal.tasks.map((task, index) => (
                       <div key={task.id} className="flex items-center">
-                        <div className={`w-4 h-4 mr-2 rounded-full flex-shrink-0 ${task.completed ? 'bg-green-100 border border-green-400' : 'border border-gray-300'}`}>
+                        <div 
+                          className={`w-4 h-4 mr-2 rounded-full flex-shrink-0 flex items-center justify-center ${
+                            task.completed ? 'bg-green-100 text-green-600' : 'border border-gray-300'
+                          }`}
+                          onClick={() => {
+                            // 更新任务状态
+                            const updatedTasks = [...goal.tasks!];
+                            updatedTasks[index] = { ...task, completed: !task.completed };
+                            
+                            // 计算新的进度
+                            const completedCount = updatedTasks.filter(t => t.completed).length;
+                            const newProgress = updatedTasks.length > 0 ? completedCount / updatedTasks.length : 0;
+                            
+                            // 更新目标
+                            updateGoal(goal.id, { 
+                              tasks: updatedTasks,
+                              progress: newProgress
+                            });
+                          }}
+                        >
                           {task.completed && <CheckCircle2 size={16} className="text-green-500" />}
                         </div>
                         <span className={`text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-600'}`}>
                           {task.title}
                         </span>
+                        {task.timeline && (
+                          <span className="ml-2 text-xs text-gray-400">
+                            ({task.timeline})
+                          </span>
+                        )}
                       </div>
                     ))}
-                    {goal.tasks.length > 3 && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        +{goal.tasks.length - 3} more tasks
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -821,21 +852,197 @@ export default function EnhancedGoalList() {
                   </span>
                 )}
                 
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={goal.progress * 100}
-                  onChange={(e) => updateGoalProgress(goal.id, Number(e.target.value) / 100)}
-                  className="w-1/2"
-                  title={`${goal.title} progress: ${Math.round(goal.progress * 100)}%`}
-                  aria-label={`Adjust progress for ${goal.title}`}
-                />
+                {/* 完成按钮 */}
+                <button
+                  className={`px-3 py-1 text-xs rounded-full ${
+                    goal.status === 'completed' 
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  }`}
+                  onClick={() => updateGoal(goal.id, { 
+                    status: goal.status === 'completed' ? 'active' : 'completed',
+                    progress: goal.status === 'completed' ? 0 : 1
+                  })}
+                >
+                  {goal.status === 'completed' ? 'Mark as Incomplete' : 'Mark as Complete'}
+                </button>
               </div>
             </div>
           ))
         )}
       </div>
+      
+      {/* 编辑目标模态框 */}
+      {editingGoal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h2 className="text-xl font-semibold mb-4">Edit Goal</h2>
+            
+            <div className="space-y-4">
+              {/* 标题输入 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={editingGoal.title}
+                  onChange={(e) => setEditingGoal({ ...editingGoal, title: e.target.value })}
+                  placeholder="Enter goal title"
+                  title="Goal title"
+                  aria-label="Goal title"
+                />
+              </div>
+              
+              {/* 描述输入 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={editingGoal.description || ''}
+                  onChange={(e) => setEditingGoal({ ...editingGoal, description: e.target.value })}
+                  placeholder="Enter goal description"
+                  title="Goal description"
+                  aria-label="Goal description"
+                />
+              </div>
+              
+              {/* 分类输入 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={editingGoal.category || ''}
+                  onChange={(e) => setEditingGoal({ ...editingGoal, category: e.target.value })}
+                  placeholder="e.g. Health, Career, Personal"
+                />
+              </div>
+              
+              {/* 同步提示 */}
+              <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-700 border border-blue-100">
+                <div className="flex items-center">
+                  <Info size={16} className="mr-2 flex-shrink-0" />
+                  <p>任务会自动同步到 All Tasks。编辑或添加任务后，点击保存按钮更新。</p>
+                </div>
+              </div>
+              
+              {/* 任务列表编辑 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tasks
+                </label>
+                <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
+                  {editingGoal.tasks && editingGoal.tasks.length > 0 ? (
+                    editingGoal.tasks.map((task, index) => (
+                      <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={(e) => {
+                            const updatedTasks = [...editingGoal.tasks!];
+                            updatedTasks[index] = { ...task, completed: e.target.checked };
+                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                          aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
+                          title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
+                        />
+                        <input
+                          type="text"
+                          value={task.title}
+                          onChange={(e) => {
+                            const updatedTasks = [...editingGoal.tasks!];
+                            updatedTasks[index] = { ...task, title: e.target.value };
+                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                          }}
+                          className="flex-1 px-2 py-1 border border-gray-200 rounded-md text-sm"
+                          placeholder="Enter task title"
+                          aria-label="Task title"
+                        />
+                        <button
+                          onClick={() => {
+                            const updatedTasks = [...editingGoal.tasks!];
+                            updatedTasks.splice(index, 1);
+                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                          aria-label={`Remove task "${task.title || 'Untitled task'}"`}
+                          title="Remove task"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm text-center py-2">No tasks yet</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const newTask: GoalTask = {
+                      id: `task-${Date.now()}`,
+                      title: '',
+                      completed: false
+                    };
+                    setEditingGoal({
+                      ...editingGoal,
+                      tasks: [...(editingGoal.tasks || []), newTask]
+                    });
+                  }}
+                  className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                >
+                  <Plus size={14} className="mr-1" /> Add Task
+                </button>
+              </div>
+            </div>
+            
+            {/* 模态框按钮 */}
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                onClick={() => setEditingGoal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                onClick={() => {
+                  // 过滤掉空任务
+                  const filteredTasks = editingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
+                  
+                  // 计算新的进度
+                  let newProgress = editingGoal.progress;
+                  if (filteredTasks.length > 0) {
+                    const completedCount = filteredTasks.filter(t => t.completed).length;
+                    newProgress = completedCount / filteredTasks.length;
+                  }
+                  
+                  // 更新目标
+                  updateGoal(editingGoal.id, {
+                    ...editingGoal,
+                    tasks: filteredTasks,
+                    progress: newProgress
+                  });
+                  
+                  // 记录日志
+                  console.log('更新目标:', editingGoal.title, '任务数:', filteredTasks.length);
+                  
+                  // 关闭模态框
+                  setEditingGoal(null);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
