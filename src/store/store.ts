@@ -22,6 +22,17 @@ interface UserProfile {
   hobbies?: string[];                              // User's hobbies
   goals?: string[];                                // User's personal goals
   notes?: string;                                  // Additional notes
+  
+  // 新增字段 - 用于 AI 个性化任务推荐
+  workStyle?: string[];                            // 工作风格偏好 (专注型、多任务型等)
+  learningPreferences?: string[];                  // 学习偏好 (视觉型、听觉型等)
+  productivityPeaks?: string[];                    // 高效时段 (早晨、夜晚等)
+  challengeAreas?: string[];                       // 挑战领域 (时间管理、拖延等)
+  priorityFocus?: {                                // 默认优先级偏好
+    efficiency: number;                            // 效率权重 (1-10)
+    quality: number;                               // 质量权重 (1-10)
+    creativity: number;                            // 创意权重 (1-10)
+  };
 }
 
 /**
