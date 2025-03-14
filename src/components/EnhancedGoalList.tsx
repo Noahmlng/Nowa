@@ -477,6 +477,9 @@ ${userFeedback}
     setIsCurationLoading(true);
     setShowContinuedFeedback(false);
     
+    // 在加载新建议期间先隐藏当前任务列表
+    setCurationAIResponse(null);
+    
     try {
       // 构建增强版提示，包含历史上下文
       const taskListText = (editingGoal.tasks || [])
@@ -1340,7 +1343,7 @@ ${continuedFeedback}
                         </div>
                       )}
                       
-                      {curationAIResponse && (
+                      {curationAIResponse && !isCurationLoading && (
                         <>
                           <div className="mb-3">
                             <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
@@ -1356,6 +1359,7 @@ ${continuedFeedback}
                             </div>
                           </div>
                           
+                          {/* 重新设计按钮区域，确保点击事件正确绑定 */}
                           <div className="flex justify-between mt-3">
                             <button
                               type="button"
@@ -1378,20 +1382,6 @@ ${continuedFeedback}
                               应用建议
                             </button>
                           </div>
-                          
-                          {/* 调试辅助按钮 - 放在单独的行，更容易点击 */}
-                          <div className="mt-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                console.log('点击了手动显示反馈按钮');
-                                setShowContinuedFeedback(!showContinuedFeedback);
-                              }}
-                              className="inline-flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 border border-gray-300"
-                            >
-                              {showContinuedFeedback ? '隐藏反馈' : '手动显示反馈'}
-                            </button>
-                          </div>
                         </>
                       )}
                     </div>
@@ -1402,6 +1392,50 @@ ${continuedFeedback}
                   </p>
                 </div>
                 
+                {/* 将反馈区域移到任务列表上方 */}
+                {showContinuedFeedback && (
+                  <div className="border border-blue-200 bg-blue-50 p-4 rounded-md my-4">
+                    <p className="text-sm font-medium text-blue-700 mb-2">
+                      请告诉我哪些方面需要进一步调整：
+                    </p>
+                    <textarea
+                      className="w-full px-4 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={continuedFeedback}
+                      onChange={(e) => setContinuedFeedback(e.target.value)}
+                      placeholder="例如：'第一个任务时间太紧张'，'希望增加更多关于研究的任务'，'需要明确每个任务的优先级'..."
+                      rows={3}
+                    />
+                    <div className="flex justify-end mt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          console.log('取消反馈');
+                          setShowContinuedFeedback(false);
+                        }}
+                        className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 mr-2"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          console.log('提交反馈内容:', continuedFeedback);
+                          submitContinuedFeedback();
+                        }}
+                        disabled={!continuedFeedback.trim()}
+                        className={`px-3 py-1.5 text-sm rounded-md flex items-center ${
+                          !continuedFeedback.trim() 
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        <Send size={14} className="mr-1.5" />
+                        发送反馈
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* AI Insights - shown when available */}
                 {aiAnalysisResult?.insights && (
                   <div className="bg-blue-50 p-3 rounded-md text-sm border border-blue-100">
@@ -1428,102 +1462,6 @@ ${continuedFeedback}
                     </div>
                   </div>
                 )}
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tasks {editingGoal?.tasks && editingGoal.tasks.length > 0 ? `(${editingGoal.tasks.length})` : ''}
-                  </label>
-                  <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
-                    {editingGoal?.tasks && editingGoal.tasks.length > 0 ? (
-                      editingGoal.tasks.map((task, index) => (
-                        <div 
-                          key={`${task.id}-${index}`} 
-                          className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={task.completed}
-                            onChange={(e) => {
-                              const updatedTasks = [...editingGoal.tasks!];
-                              updatedTasks[index] = { ...task, completed: e.target.checked };
-                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                              console.log('任务状态已更新:', updatedTasks);
-                            }}
-                            className="h-4 w-4 rounded border-gray-300"
-                            aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
-                            title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
-                          />
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={task.title}
-                              onChange={(e) => {
-                                const updatedTasks = [...editingGoal.tasks!];
-                                updatedTasks[index] = { ...task, title: e.target.value };
-                                setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                                console.log('任务标题已更新:', updatedTasks);
-                              }}
-                              className="w-full px-2 py-1 border border-gray-200 rounded-md text-sm"
-                              placeholder="Enter task title"
-                              aria-label="Task title"
-                            />
-                            {task.timeline && (
-                              <div className="flex items-center text-xs text-gray-500 mt-1">
-                                <Clock size={12} className="mr-1" />
-                                <span>{task.timeline}</span>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => {
-                              const updatedTasks = [...editingGoal.tasks!];
-                              updatedTasks.splice(index, 1);
-                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
-                              console.log('任务已删除:', updatedTasks);
-                            }}
-                            className="text-red-500 hover:text-red-700"
-                            aria-label={`Remove task "${task.title || 'Untitled task'}"`}
-                            title="Remove task"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-gray-500 text-sm text-center py-4">
-                        {isCurationLoading ? "正在更新任务..." : "暂无任务，请添加或使用AI生成"}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-2 flex justify-between items-center">
-                    <button
-                      onClick={() => {
-                        const newTask: GoalTask = {
-                          id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                          title: '',
-                          completed: false
-                        };
-                        setEditingGoal({
-                          ...editingGoal,
-                          tasks: [...(editingGoal.tasks || []), newTask]
-                        });
-                        console.log('新任务已添加');
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                    >
-                      <Plus size={14} className="mr-1" /> 添加任务
-                    </button>
-                    
-                    {curationAIResponse && (
-                      <button
-                        onClick={applyAISuggestion}
-                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                      >
-                        <Wand2 size={14} className="mr-1" /> 应用当前的AI建议
-                      </button>
-                    )}
-                  </div>
-                </div>
               </div>
               
               {/* 同步提示 */}
@@ -1534,94 +1472,147 @@ ${continuedFeedback}
                 </div>
               </div>
               
-              {/* 重新设计反馈区域，确保它能正确显示 */}
-              {showContinuedFeedback && (
-                <div className="mt-4 border-t pt-4 border-blue-200 bg-blue-50 p-4 rounded-md">
-                  <p className="text-sm font-medium text-blue-700 mb-2">
-                    请告诉我哪些方面需要进一步调整：
-                  </p>
-                  <textarea
-                    className="w-full px-4 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={continuedFeedback}
-                    onChange={(e) => setContinuedFeedback(e.target.value)}
-                    placeholder="例如：'第一个任务时间太紧张'，'希望增加更多关于研究的任务'，'需要明确每个任务的优先级'..."
-                    rows={3}
-                  />
-                  <div className="flex justify-end mt-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('取消反馈');
-                        setShowContinuedFeedback(false);
-                      }}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 mr-2"
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('提交反馈内容:', continuedFeedback);
-                        submitContinuedFeedback();
-                      }}
-                      disabled={!continuedFeedback.trim()}
-                      className={`px-3 py-1.5 text-sm rounded-md flex items-center ${
-                        !continuedFeedback.trim() 
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      <Send size={14} className="mr-1.5" />
-                      发送反馈
-                    </button>
-                  </div>
+              {/* 任务列表部分 */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tasks {editingGoal?.tasks && editingGoal.tasks.length > 0 ? `(${editingGoal.tasks.length})` : ''}
+                </label>
+                <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-md p-2">
+                  {editingGoal?.tasks && editingGoal.tasks.length > 0 ? (
+                    editingGoal.tasks.map((task, index) => (
+                      <div 
+                        key={`${task.id}-${index}`} 
+                        className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={(e) => {
+                            const updatedTasks = [...editingGoal.tasks!];
+                            updatedTasks[index] = { ...task, completed: e.target.checked };
+                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                            console.log('任务状态已更新:', updatedTasks);
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                          aria-label={`Mark task "${task.title || 'Untitled task'}" as ${task.completed ? 'incomplete' : 'complete'}`}
+                          title={`Mark task as ${task.completed ? 'incomplete' : 'complete'}`}
+                        />
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={task.title}
+                            onChange={(e) => {
+                              const updatedTasks = [...editingGoal.tasks!];
+                              updatedTasks[index] = { ...task, title: e.target.value };
+                              setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                              console.log('任务标题已更新:', updatedTasks);
+                            }}
+                            className="w-full px-2 py-1 border border-gray-200 rounded-md text-sm"
+                            placeholder="Enter task title"
+                            aria-label="Task title"
+                          />
+                          {task.timeline && (
+                            <div className="flex items-center text-xs text-gray-500 mt-1">
+                              <Clock size={12} className="mr-1" />
+                              <span>{task.timeline}</span>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updatedTasks = [...editingGoal.tasks!];
+                            updatedTasks.splice(index, 1);
+                            setEditingGoal({ ...editingGoal, tasks: updatedTasks });
+                            console.log('任务已删除:', updatedTasks);
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                          aria-label={`Remove task "${task.title || 'Untitled task'}"`}
+                          title="Remove task"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm text-center py-4">
+                      {isCurationLoading ? "正在更新任务..." : "暂无任务，请添加或使用AI生成"}
+                    </p>
+                  )}
                 </div>
-              )}
-              
-              {/* 模态框按钮 */}
-              <div className="flex justify-end space-x-2 mt-6">
-                <button
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  onClick={() => setEditingGoal(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  onClick={() => {
-                    // 确保使用最新的编辑状态
-                    const currentEditingGoal = {...editingGoal};
-                    
-                    // 过滤掉空任务
-                    const filteredTasks = currentEditingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
-                    
-                    console.log('保存前的任务列表:', filteredTasks);
-                    
-                    // 计算新的进度
-                    let newProgress = currentEditingGoal.progress;
-                    if (filteredTasks.length > 0) {
-                      const completedCount = filteredTasks.filter(t => t.completed).length;
-                      newProgress = completedCount / filteredTasks.length;
-                    }
-                    
-                    // 更新目标
-                    updateGoal(currentEditingGoal.id, {
-                      ...currentEditingGoal,
-                      tasks: filteredTasks,
-                      progress: newProgress,
-                      lastUpdated: new Date().toISOString() // 添加更新时间戳
-                    } as Partial<Goal>);
-                    
-                    // 记录日志
-                    console.log('更新目标:', currentEditingGoal.title, '任务数:', filteredTasks.length);
-                    
-                    // 关闭模态框
-                    setEditingGoal(null);
-                  }}
-                >
-                  Save
-                </button>
+                <div className="mt-2 flex justify-between items-center">
+                  <button
+                    onClick={() => {
+                      const newTask: GoalTask = {
+                        id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        title: '',
+                        completed: false
+                      };
+                      setEditingGoal({
+                        ...editingGoal,
+                        tasks: [...(editingGoal.tasks || []), newTask]
+                      });
+                      console.log('新任务已添加');
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <Plus size={14} className="mr-1" /> 添加任务
+                  </button>
+                  
+                  {curationAIResponse && (
+                    <button
+                      onClick={applyAISuggestion}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                    >
+                      <Wand2 size={14} className="mr-1" /> 应用当前的AI建议
+                    </button>
+                  )}
+                </div>
               </div>
+            </div>
+            
+            {/* 模态框底部按钮 */}
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                onClick={() => setEditingGoal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                onClick={() => {
+                  // 确保使用最新的编辑状态
+                  const currentEditingGoal = {...editingGoal};
+                  
+                  // 过滤掉空任务
+                  const filteredTasks = currentEditingGoal.tasks?.filter(t => t.title.trim() !== '') || [];
+                  
+                  console.log('保存前的任务列表:', filteredTasks);
+                  
+                  // 计算新的进度
+                  let newProgress = currentEditingGoal.progress;
+                  if (filteredTasks.length > 0) {
+                    const completedCount = filteredTasks.filter(t => t.completed).length;
+                    newProgress = completedCount / filteredTasks.length;
+                  }
+                  
+                  // 更新目标
+                  updateGoal(currentEditingGoal.id, {
+                    ...currentEditingGoal,
+                    tasks: filteredTasks,
+                    progress: newProgress,
+                    lastUpdated: new Date().toISOString() // 添加更新时间戳
+                  } as Partial<Goal>);
+                  
+                  // 记录日志
+                  console.log('更新目标:', currentEditingGoal.title, '任务数:', filteredTasks.length);
+                  
+                  // 关闭模态框
+                  setEditingGoal(null);
+                }}
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
