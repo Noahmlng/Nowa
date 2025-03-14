@@ -3,6 +3,28 @@ import { persist } from 'zustand/middleware';
 import { convertTimelineToDate } from '@/utils/dateUtils';
 
 /**
+ * User interface - Represents the user in the application
+ */
+interface User {
+  nickname: string;                                // User's nickname
+  tags: string[];                                  // User's tags
+  status?: string;                                 // User's current status
+}
+
+/**
+ * UserProfile interface - Represents additional user information
+ */
+interface UserProfile {
+  weight?: string;                                 // User's weight
+  height?: string;                                 // User's height
+  personality?: string[];                          // User's personality traits
+  interests?: string[];                            // User's interests
+  hobbies?: string[];                              // User's hobbies
+  goals?: string[];                                // User's personal goals
+  notes?: string;                                  // Additional notes
+}
+
+/**
  * Task interface - Represents a task in the application
  * Based on the Task model from models.js
  */
@@ -13,9 +35,27 @@ interface Task {
   dueDate?: string;                                // Optional due date (ISO string format)
   status: 'pending' | 'completed' | 'cancelled';   // Task status
   priority: 'low' | 'medium' | 'high';             // Task priority level
+  important: boolean;                              // Whether the task is marked as important
   goalId?: string;                                 // Optional reference to a goal
   taskListId: string;                              // Reference to the list this task belongs to
-  feedback?: string[];                             // Optional array of feedback entries
+  feedback?: {text: string; timestamp: string}[];  // Optional array of feedback entries with timestamps
+  subtasks?: Subtask[];                            // Optional array of subtasks
+  completedAt?: string;                            // Optional completion date (ISO string format)
+  optimizationFeedback?: string;                   // Optional feedback used for AI optimization
+  // 添加重复性任务相关字段
+  isRecurring?: boolean;                           // 是否是重复性任务
+  recurringPattern?: string;                       // 重复模式：daily, weekly, monthly, custom
+  recurringDays?: number[];                        // 对于每周重复，表示星期几 (0-6, 0表示周日)
+  recurringInterval?: number;                      // 重复间隔（每X天/周/月）
+}
+
+/**
+ * Subtask interface - Represents a subtask of a task
+ */
+interface Subtask {
+  id: string;                                      // Unique identifier for the subtask
+  title: string;                                   // Subtask title
+  completed: boolean;                              // Whether the subtask is completed
 }
 
 /**
@@ -27,6 +67,11 @@ interface GoalTask {
   timeline?: string;                               // Optional timeline information (e.g., "March", "Week 1")
   completed: boolean;                              // Whether the task is completed
   description?: string;                            // Optional task description
+  // 添加重复性任务相关字段
+  isRecurring?: boolean;                           // 是否是重复性任务
+  recurringPattern?: string;                       // 重复模式：daily, weekly, monthly, custom
+  recurringDays?: number[];                        // 对于每周重复，表示星期几 (0-6, 0表示周日)
+  recurringInterval?: number;                      // 重复间隔（每X天/周/月）
 }
 
 /**
@@ -60,16 +105,23 @@ interface TaskList {
  */
 interface AppState {
   // State
+  user: User;                                      // User information
+  userProfile: UserProfile;                        // User profile information
   tasks: Task[];                                   // Array of all tasks
   goals: Goal[];                                   // Array of all goals
   taskLists: TaskList[];                           // Array of all task lists
   selectedList: string;                            // Currently selected list ID
+  
+  // User actions
+  updateUser: (user: Partial<User>) => void;       // Update user information
+  updateUserProfile: (profile: Partial<UserProfile>) => void; // Update user profile information
   
   // Task actions
   addTask: (task: Omit<Task, 'id'>) => void;       // Add a new task (ID is generated automatically)
   updateTask: (id: string, task: Partial<Task>) => void; // Update an existing task
   deleteTask: (id: string) => void;                // Delete a task
   toggleTaskComplete: (id: string) => void;        // Toggle a task between completed and pending
+  toggleTaskImportant: (id: string) => void;       // Toggle a task's important status
   addTaskFeedback: (id: string, feedback: string) => void; // Add feedback to a task
   
   // Goal actions
@@ -108,7 +160,13 @@ const goalTaskToTask = (goalTask: GoalTask, goalId: string): Omit<Task, 'id'> =>
     priority: 'medium',
     taskListId: 'all', // 添加到 All Tasks
     goalId: goalId, // 关联到对应目标
-    dueDate // 使用转换后的日期
+    dueDate, // 使用转换后的日期
+    important: false, // 默认不重要
+    // 传递重复性任务信息
+    isRecurring: goalTask.isRecurring,
+    recurringPattern: goalTask.recurringPattern,
+    recurringDays: goalTask.recurringDays,
+    recurringInterval: goalTask.recurringInterval
   };
 };
 
@@ -120,6 +178,8 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Initial state
+      user: { nickname: '', tags: [] },
+      userProfile: {},
       tasks: [],
       goals: [],
       taskLists: [
@@ -128,12 +188,20 @@ export const useAppStore = create<AppState>()(
       ],
       selectedList: 'today',
       
+      // User actions implementation
+      updateUser: (user) => set((state) => ({ user: { ...state.user, ...user } })),
+      updateUserProfile: (profile) => set((state) => ({ userProfile: { ...state.userProfile, ...profile } })),
+      
       // Task actions implementation
       addTask: (task) => {
         // 打印日志以便调试
         console.log('Adding task:', task);
         set((state) => ({ 
-          tasks: [...state.tasks, { ...task, id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` }] 
+          tasks: [...state.tasks, { 
+            ...task, 
+            id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            important: task.important !== undefined ? task.important : false
+          }] 
         }));
       },
       
@@ -158,13 +226,22 @@ export const useAppStore = create<AppState>()(
           ) 
         })),
       
+      toggleTaskImportant: (id) => 
+        set((state) => ({ 
+          tasks: state.tasks.map(task => 
+            task.id === id 
+              ? { ...task, important: !task.important } 
+              : task
+          ) 
+        })),
+      
       addTaskFeedback: (id, feedback) => 
         set((state) => ({ 
           tasks: state.tasks.map(task => 
             task.id === id 
               ? { 
                   ...task, 
-                  feedback: task.feedback ? [...task.feedback, feedback] : [feedback] 
+                  feedback: task.feedback ? [...task.feedback, { text: feedback, timestamp: new Date().toISOString() }] : [{ text: feedback, timestamp: new Date().toISOString() }] 
                 } 
               : task
           ) 
@@ -190,7 +267,11 @@ export const useAppStore = create<AppState>()(
             // 如果任务已存在，更新其状态以匹配 goalTask
             updateTask(existingTask.id, {
               status: goalTask.completed ? 'completed' : 'pending',
-              description: goalTask.description
+              description: goalTask.description,
+              isRecurring: goalTask.isRecurring,
+              recurringPattern: goalTask.recurringPattern,
+              recurringDays: goalTask.recurringDays,
+              recurringInterval: goalTask.recurringInterval
             });
             console.log(`Updated existing task: ${existingTask.id} - ${goalTask.title}`);
           } else {
@@ -282,7 +363,7 @@ export const useAppStore = create<AppState>()(
             goal.id === id ? { ...goal, progress } : goal
           ) 
         })),
-      
+              
       // TaskList actions implementation
       addTaskList: (taskList) => 
         set((state) => ({ 
