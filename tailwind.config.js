@@ -49,6 +49,26 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          blue: "#0078D7",
+          purple: "#6264A7",
+          teal: "#00B7C3",
+          green: "#107C10",
+          red: "#D24726",
+          yellow: "#FFB900",
+          gray: {
+            50: "#F5F5F5",
+            100: "#E6E6E6",
+            200: "#CCCCCC",
+            300: "#B3B3B3",
+            400: "#999999",
+            500: "#808080",
+            600: "#666666",
+            700: "#4D4D4D",
+            800: "#333333",
+            900: "#1A1A1A",
+          },
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -64,10 +84,20 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(-10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        fadeIn: 'fadeIn 0.3s ease-out',
+      },
+      backgroundImage: {
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic":
+          "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
     },
   },

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap } from 'lucide-react';
 import TaskDetail from './TaskDetail';
+import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
 
 /**
@@ -47,6 +48,7 @@ interface TaskListProps {
  * Displays a list of tasks based on the provided filter.
  * Allows adding new tasks, toggling completion status, and opening task details.
  * Groups tasks by date (Today, Overdue, Future dates, No Due Date).
+ * Includes an AI button for each task to get AI-powered suggestions.
  */
 export default function TaskList({ filter }: TaskListProps) {
   // Get tasks and task actions from the global store
@@ -56,6 +58,7 @@ export default function TaskList({ filter }: TaskListProps) {
   const [newTaskTitle, setNewTaskTitle] = useState(''); // For the new task input
   const [selectedTask, setSelectedTask] = useState<Task | null>(null); // Currently selected task
   const [isDetailOpen, setIsDetailOpen] = useState(false); // Whether the task detail modal is open
+  const [aiSuggestTaskId, setAiSuggestTaskId] = useState<string | null>(null); // Track task for AI suggestions
 
   /**
    * Filter tasks based on the selected filter
@@ -144,27 +147,19 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
-      // 检查当前 filter 是否为目标 ID
-      const isGoalFilter = goals.some(goal => goal.id === filter);
-      
-      // Set due date to today if adding to My Day
-      const today = new Date().toISOString().split('T')[0];
-      
+      // Create the new task
       addTask({
-        title: newTaskTitle.trim(),
+        title: newTaskTitle,
         status: 'pending',
         priority: 'medium',
         important: false,
-        taskListId: filter === 'today' || filter === 'all' || filter === 'completed' || filter === 'important'
-          ? 'today' 
-          : filter,
-        // If adding to My Day, set due date to today
-        dueDate: filter === 'today' ? today : undefined,
-        // 如果当前 filter 是目标 ID，则自动关联到该目标
-        goalId: isGoalFilter ? filter : undefined
+        taskListId: filter === 'today' || filter === 'all' || filter === 'important' || filter === 'completed' 
+          ? 'inbox' // Default list for filtered views
+          : filter, // Use the current list ID for list views
       });
       
-      setNewTaskTitle(''); // Clear the input after adding
+      // Clear the input field
+      setNewTaskTitle('');
     }
   };
 
@@ -269,164 +264,162 @@ export default function TaskList({ filter }: TaskListProps) {
 
   const theme = getThemeColor();
 
+  // Handle showing AI suggestions for a task
+  const handleShowAiSuggestions = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening task detail
+    setAiSuggestTaskId(taskId);
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto pb-20">
-        {/* Task groups - organized by date */}
-        {sortedGroups.length > 0 ? (
-          sortedGroups.map(group => (
-            <div key={group} className="mb-4">
-              {/* 在 My Day 页面且组名为 Today 时不显示组标题 */}
-              {!(filter === 'today' && group === 'Today') && (
-                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-                  {group}
-                </h3>
-              )}
-              
-              <ul className="space-y-1.5">
-                {groupedTasks[group].map(task => (
-                  <li 
-                    key={task.id} 
-                    className={`flex items-center p-2.5 rounded-lg transition-all cursor-pointer ${
-                      task.status === 'completed' 
-                        ? 'bg-gray-50 text-gray-500' 
-                        : 'bg-white hover:bg-gray-50 shadow'
-                    }`}
-                    onClick={() => handleOpenDetail(task)}
-                  >
-                    {/* Task completion toggle button */}
+    <div className="relative h-full flex flex-col overflow-hidden">
+      {/* Task input */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center">
+          <input
+            type="text"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Add a task..."
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleAddTask()}
+          />
+          <button
+            className="bg-blue-500 text-white px-3 py-2 rounded-r-md hover:bg-blue-600 transition-colors"
+            onClick={handleAddTask}
+          >
+            <Plus size={20} />
+          </button>
+        </div>
+      </div>
+      
+      {/* Task List */}
+      <div className="flex-1 overflow-y-auto pb-16">
+        {Object.entries(groupedTasks).map(([group, tasksInGroup]) => (
+          <div key={group} className="mb-6">
+            <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+              {group}
+            </h3>
+            <ul className="divide-y divide-gray-200">
+              {tasksInGroup.map((task) => (
+                <li 
+                  key={task.id} 
+                  className="relative px-4 py-3 hover:bg-gray-50 transition-colors"
+                >
+                  {aiSuggestTaskId === task.id && (
+                    <div className="relative z-20">
+                      <TaskSuggestions 
+                        taskId={task.id} 
+                        onClose={() => setAiSuggestTaskId(null)}
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="flex items-start gap-3">
+                    {/* Task completion toggle */}
                     <button
-                      className="mr-2.5 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation(); // 防止点击传播到父元素
-                        toggleTaskComplete(task.id);
-                      }}
+                      className="flex-shrink-0 mt-1"
+                      onClick={() => toggleTaskComplete(task.id)}
                     >
                       {task.status === 'completed' ? (
-                        <CheckCircle className="text-green-500 hover:text-green-600" size={18} />
+                        <CheckCircle className="h-5 w-5 text-blue-500" />
                       ) : (
-                        <div className="w-[18px] h-[18px] border-2 border-gray-300 rounded-full hover:border-green-500 transition-colors" />
+                        <div className="h-5 w-5 rounded-full border border-gray-300"></div>
                       )}
                     </button>
                     
-                    {/* Task title and due date */}
-                    <div className="flex-1">
-                      <p className={`text-sm text-gray-900 hover:bg-gray-100 rounded px-1 py-0.5 ${task.status === 'completed' ? 'line-through text-gray-500' : ''}`}>
-                        {task.title}
-                      </p>
-                      
-                      <div className="flex items-center mt-0.5 space-x-2">
-                        {task.dueDate && (
-                          <div className="flex items-center text-xs text-gray-500">
-                            <Calendar size={12} className="mr-1" />
-                            <span>{format(parseISO(task.dueDate), 'MMM d')}</span>
-                          </div>
-                        )}
+                    {/* Task content */}
+                    <div className="flex-1 min-w-0" onClick={() => handleOpenDetail(task)}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            {task.title}
+                          </p>
+                          
+                          {/* Display subtasks count if present */}
+                          {task.subtasks && task.subtasks.length > 0 && (
+                            <div className="mt-1 flex items-center text-xs text-gray-500">
+                              <ClipboardList className="h-3 w-3 mr-1" />
+                              {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length} subtasks
+                            </div>
+                          )}
+                          
+                          {/* Display associated goal if present */}
+                          {task.goalId && (
+                            <div className="mt-1 flex items-center text-xs text-gray-500">
+                              <Target className="h-3 w-3 mr-1" />
+                              {getAssociatedGoalName(task.goalId)}
+                            </div>
+                          )}
+                        </div>
                         
-                        {/* 显示关联的目标名称 */}
-                        {getAssociatedGoalName(task.goalId) && (
-                          <div className="flex items-center text-xs text-gray-500">
-                            <Target size={12} className="mr-1 text-purple-500" />
-                            <span className="truncate max-w-[120px]">{getAssociatedGoalName(task.goalId)}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center space-x-2 ml-2">
+                          {/* AI Suggestions button */}
+                          <button
+                            className="text-gray-400 hover:text-purple-500"
+                            onClick={(e) => handleShowAiSuggestions(task.id, e)}
+                            title="Get AI suggestions"
+                          >
+                            <Zap className="h-4 w-4" />
+                          </button>
+                          
+                          {/* Important flag */}
+                          <button
+                            className="text-gray-400 hover:text-yellow-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskImportant(task.id);
+                            }}
+                          >
+                            <Star
+                              className={`h-4 w-4 ${task.important ? 'text-yellow-500 fill-yellow-500' : ''}`}
+                            />
+                          </button>
+                          
+                          {/* Delete button */}
+                          <button
+                            className="text-gray-400 hover:text-red-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteTask(task.id);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Task action buttons */}
-                    <div className="flex space-x-1">
-                      {/* Important star button */}
-                      <button
-                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation(); // 防止点击传播到父元素
-                          toggleTaskImportant(task.id);
-                        }}
-                        title={task.important ? "Remove importance" : "Mark as important"}
-                      >
-                        <Star 
-                          size={16} 
-                          className={task.important 
-                            ? "text-red-500 fill-red-500" 
-                            : "text-gray-400 hover:text-red-500"
-                          } 
-                        />
-                      </button>
-
-                      {/* Add to My Day button - only shown in lists other than Today and Goals */}
-                      {shouldShowAddToMyDay && task.taskListId !== 'today' && (
-                        <button
-                          className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation(); // 防止点击传播到父元素
-                            handleAddToMyDay(task.id);
-                          }}
-                          title="Add to My Day"
-                        >
-                          <Sun size={16} className="text-gray-400 hover:text-yellow-500" />
-                        </button>
+                      
+                      {/* Due date if present */}
+                      {task.dueDate && (
+                        <div className="mt-1 flex items-center text-xs text-gray-500">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          <span>
+                            {isToday(parseISO(task.dueDate))
+                              ? 'Today'
+                              : format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                          </span>
+                        </div>
                       )}
-
-                      {/* 删除编辑按钮 */}
-                      <button
-                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation(); // 防止点击传播到父元素
-                          deleteTask(task.id);
-                        }}
-                        title="Delete task"
-                      >
-                        <Trash2 size={16} className="text-gray-400 hover:text-red-500" />
-                      </button>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        ) : (
-          <div className="text-center py-12 bg-white rounded-lg shadow flex flex-col items-center">
-            <ClipboardList size={48} className="text-gray-300 mb-4" />
-            <p className="text-gray-500 mb-4">暂无任务</p>
-            <div className="flex items-center text-sm text-blue-500">
-              <ArrowDown size={16} className="mr-1 animate-bounce" />
-              <span>在下方添加你的第一个任务</span>
-            </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        
+        {/* Empty state */}
+        {Object.keys(groupedTasks).length === 0 && (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <ClipboardList className="h-12 w-12 mb-2" />
+            <p>No tasks to show</p>
           </div>
         )}
       </div>
-
-      {/* Add new task input - fixed at the bottom */}
-      <div className={`fixed bottom-0 left-64 right-0 bg-white border-t ${theme.border} shadow-md p-4`}>
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center space-x-2">
-            <input
-              type="text"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm text-sm"
-              placeholder="Add a new task..."
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault(); // 阻止默认行为，防止表单提交
-                  handleAddTask();
-                }
-              }}
-            />
-            <button
-              className={`p-2 ${theme.buttonBg} text-white rounded-lg shadow-sm transition-colors`}
-              onClick={handleAddTask}
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Task detail modal - opens when a task is selected */}
+      
+      {/* Task Detail Slide-in */}
       {selectedTask && (
         <TaskDetail
-          task={selectedTask as any}
+          task={selectedTask}
           isOpen={isDetailOpen}
           onClose={handleCloseDetail}
           onUpdate={handleUpdateTask}
