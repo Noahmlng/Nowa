@@ -80,6 +80,16 @@ export default function EnhancedGoalList() {
   const [isCurationLoading, setIsCurationLoading] = useState(false);
   const [suggestionType, setSuggestionType] = useState<'tasks' | null>(null);
 
+  // 多轮交互相关状态
+  const [feedbackHistory, setFeedbackHistory] = useState<Array<{
+    role: 'user' | 'assistant',
+    content: string,
+    timestamp: string
+  }>>([]);
+  const [currentFeedbackRound, setCurrentFeedbackRound] = useState(1);
+  const [showContinuedFeedback, setShowContinuedFeedback] = useState(false);
+  const [continuedFeedback, setContinuedFeedback] = useState('');
+
   // Effects for AI suggestions
   useEffect(() => {
     if (newGoal.title && newGoal.title.length > 3 && !aiSuggestion) {
@@ -408,7 +418,137 @@ ${userFeedback}
     }
   };
 
-  // 应用AI任务优化建议（仅在编辑模式下使用）
+  // 处理用户表示不满意并继续提供反馈
+  const handleFeedbackContinuation = () => {
+    // 添加详细的调试日志
+    console.log('====== 开始：handleFeedbackContinuation =======');
+    console.log('editingGoal:', editingGoal);
+    console.log('curationAIResponse:', curationAIResponse);
+    console.log('showContinuedFeedback (当前):', showContinuedFeedback);
+    
+    try {
+      // 移除对curation必须存在的检查，只要有AI响应就可以进入反馈流程
+      if (!editingGoal) {
+        console.log('条件检查未通过：没有editingGoal');
+        return;
+      }
+
+      console.log('用户点击"我不满意"按钮', { 
+        curation: editingGoal.curation,
+        hasResponse: !!curationAIResponse 
+      });
+
+      // 保存当前轮次的交互到历史
+      setFeedbackHistory(prev => [
+        ...prev,
+        {
+          role: 'user',
+          content: editingGoal.curation || '', 
+          timestamp: new Date().toISOString()
+        },
+        ...(curationAIResponse ? [{
+          role: 'assistant' as const,
+          content: curationAIResponse,
+          timestamp: new Date().toISOString()
+        }] : [])
+      ]);
+      
+      // 显示继续反馈的界面
+      setShowContinuedFeedback(true);
+      setContinuedFeedback(''); // 清空继续反馈的输入框
+      
+      console.log('设置showContinuedFeedback为true');
+      console.log('用户不满意当前建议，准备继续提供反馈');
+    } catch (error) {
+      console.error('handleFeedbackContinuation出错:', error);
+    }
+    
+    console.log('====== 结束：handleFeedbackContinuation =======');
+  };
+
+  // 提交继续的反馈
+  const submitContinuedFeedback = async () => {
+    if (!continuedFeedback.trim() || !editingGoal) return;
+    
+    // 递增反馈轮次
+    setCurrentFeedbackRound(prev => prev + 1);
+    
+    // 显示加载状态
+    setIsCurationLoading(true);
+    setShowContinuedFeedback(false);
+    
+    try {
+      // 构建增强版提示，包含历史上下文
+      const taskListText = (editingGoal.tasks || [])
+        .map((t, i) => `${i+1}. ${t.title}${t.timeline ? ` (${t.timeline})` : ''}`)
+        .join('\n');
+      
+      const historyContext = feedbackHistory.map(h => 
+        `${h.role === 'user' ? '用户反馈' : 'AI建议'}:\n${h.content}`
+      ).join('\n\n');
+      
+      const prompt = `我正在规划一个目标: "${editingGoal.title}"
+      
+当前的任务列表:
+${taskListText}
+
+${feedbackHistory.length > 0 ? `之前的交互记录:
+${historyContext}` : ''}
+
+用户的${currentFeedbackRound > 1 ? '新' : ''}反馈:
+${continuedFeedback}
+
+请根据${currentFeedbackRound > 1 ? '所有历史反馈和新的' : '用户的'}反馈意见，优化任务列表，确保:
+1. 尊重用户的原始意图，并特别关注${currentFeedbackRound > 1 ? '新提出的' : ''}反馈点
+2. 根据用户反馈完善任务描述
+3. 为每个任务提供更具体的时间安排(如"本周五前"、"每周二"等)
+4. 保持任务描述清晰明确
+5. 可以根据反馈酌情调整任务的优先级、数量或详细程度
+
+返回的格式应为:
+- 改进后的任务1 (时间安排)
+- 改进后的任务2 (时间安排)
+...`;
+      
+      console.log(`发送第${currentFeedbackRound}轮优化AI请求:`, prompt);
+      
+      // 调用AI服务
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          options: { temperature: 0.7, maxTokens: 800 }
+        }),
+      });
+      
+      if (!response.ok) throw new Error('AI服务请求失败');
+      
+      const data = await response.json();
+      console.log(`第${currentFeedbackRound}轮AI任务优化响应:`, data);
+      
+      if (data.error) throw new Error(data.error);
+      
+      // 设置新的AI响应
+      setCurationAIResponse(data.text);
+      
+      // 更新主要反馈为最新的组合反馈
+      setEditingGoal({
+        ...editingGoal,
+        curation: continuedFeedback
+      });
+      
+    } catch (error) {
+      console.error('AI多轮任务优化请求错误:', error);
+      setCurationAIResponse(
+        `AI请求过程中出现错误。请稍后再试。${error instanceof Error ? error.message : ''}`
+      );
+    } finally {
+      setIsCurationLoading(false);
+    }
+  };
+
+  // 修改应用AI任务优化建议函数，确保在应用后清空输入区
   const applyAISuggestion = () => {
     if (!curationAIResponse || !editingGoal) {
       console.error('无法应用AI建议：缺少必要数据');
@@ -502,6 +642,10 @@ ${userFeedback}
       // 先清理AI响应状态，避免界面混乱
       setCurationAIResponse(null);
       setCurationPrompt('');
+      setContinuedFeedback('');
+      setShowContinuedFeedback(false);
+      setFeedbackHistory([]);
+      setCurrentFeedbackRound(1);
       setSuggestionType(null);
       
       // 先显示加载状态
@@ -509,12 +653,13 @@ ${userFeedback}
       
       // 短暂延迟后更新任务列表，让用户看到加载过程
       setTimeout(() => {
-        // 更新本地编辑状态，使用类型断言
+        // 更新本地编辑状态，使用类型断言，同时清空curation输入
         const updatedGoal = {
           ...editingGoal,
           tasks: updatedTasks,
           progress: newProgress,
-          lastUpdated: lastUpdatedTime
+          lastUpdated: lastUpdatedTime,
+          curation: '' // 清空curation，为下一次输入做准备
         };
         setEditingGoal(updatedGoal as Goal);
         
@@ -525,7 +670,8 @@ ${userFeedback}
         updateGoal(editingGoal.id, {
           tasks: updatedTasks,
           progress: newProgress,
-          lastUpdated: lastUpdatedTime
+          lastUpdated: lastUpdatedTime,
+          curation: '' // 确保全局状态也清空了curation字段
         } as Partial<Goal>);
         
         console.log('AI优化任务已应用，更新后的任务数:', updatedTasks.length);
@@ -1197,33 +1343,53 @@ ${userFeedback}
                       {curationAIResponse && (
                         <>
                           <div className="mb-3">
-                            <div className="text-sm font-medium text-gray-700 mb-1">
-                              优化后的任务列表:
+                            <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                              <span>优化后的任务列表:</span>
+                              {currentFeedbackRound > 1 && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                  第 {currentFeedbackRound} 轮优化
+                                </span>
+                              )}
                             </div>
                             <div className="p-3 bg-gray-50 rounded-md text-sm text-gray-700 whitespace-pre-line">
                               {curationAIResponse}
                             </div>
                           </div>
                           
-                          <div className="flex justify-between">
+                          <div className="flex justify-between mt-3">
                             <button
                               type="button"
                               onClick={() => {
-                                setCurationAIResponse(null);
-                                setCurationPrompt('');
+                                console.log('点击了"我不满意"按钮');
+                                handleFeedbackContinuation();
                               }}
-                              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md flex items-center transition-colors"
                             >
-                              取消
+                              <MessageSquare size={14} className="mr-1.5" />
+                              我不满意，需要调整
                             </button>
                             
                             <button
                               type="button"
                               onClick={applyAISuggestion}
-                              className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center transition-colors"
                             >
                               <Wand2 size={14} className="mr-1.5" />
                               应用建议
+                            </button>
+                          </div>
+                          
+                          {/* 调试辅助按钮 - 放在单独的行，更容易点击 */}
+                          <div className="mt-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                console.log('点击了手动显示反馈按钮');
+                                setShowContinuedFeedback(!showContinuedFeedback);
+                              }}
+                              className="inline-flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 border border-gray-300"
+                            >
+                              {showContinuedFeedback ? '隐藏反馈' : '手动显示反馈'}
                             </button>
                           </div>
                         </>
@@ -1367,6 +1533,50 @@ ${userFeedback}
                   <p>任务会自动同步到 All Tasks。编辑或添加任务后，点击保存按钮更新。</p>
                 </div>
               </div>
+              
+              {/* 重新设计反馈区域，确保它能正确显示 */}
+              {showContinuedFeedback && (
+                <div className="mt-4 border-t pt-4 border-blue-200 bg-blue-50 p-4 rounded-md">
+                  <p className="text-sm font-medium text-blue-700 mb-2">
+                    请告诉我哪些方面需要进一步调整：
+                  </p>
+                  <textarea
+                    className="w-full px-4 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={continuedFeedback}
+                    onChange={(e) => setContinuedFeedback(e.target.value)}
+                    placeholder="例如：'第一个任务时间太紧张'，'希望增加更多关于研究的任务'，'需要明确每个任务的优先级'..."
+                    rows={3}
+                  />
+                  <div className="flex justify-end mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.log('取消反馈');
+                        setShowContinuedFeedback(false);
+                      }}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 mr-2"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.log('提交反馈内容:', continuedFeedback);
+                        submitContinuedFeedback();
+                      }}
+                      disabled={!continuedFeedback.trim()}
+                      className={`px-3 py-1.5 text-sm rounded-md flex items-center ${
+                        !continuedFeedback.trim() 
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      <Send size={14} className="mr-1.5" />
+                      发送反馈
+                    </button>
+                  </div>
+                </div>
+              )}
               
               {/* 模态框按钮 */}
               <div className="flex justify-end space-x-2 mt-6">
