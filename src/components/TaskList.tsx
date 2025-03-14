@@ -67,7 +67,8 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const filteredTasks = tasks.filter(task => {
     if (filter === 'today') {
-      return (task.dueDate && isToday(parseISO(task.dueDate))) || !task.dueDate;
+      // Only show tasks with a due date of today
+      return task.dueDate && isToday(parseISO(task.dueDate));
     } else if (filter === 'completed') {
       return task.status === 'completed';
     } else if (filter === 'important') {
@@ -146,6 +147,9 @@ export default function TaskList({ filter }: TaskListProps) {
       // 检查当前 filter 是否为目标 ID
       const isGoalFilter = goals.some(goal => goal.id === filter);
       
+      // Set due date to today if adding to My Day
+      const today = new Date().toISOString().split('T')[0];
+      
       addTask({
         title: newTaskTitle.trim(),
         status: 'pending',
@@ -154,6 +158,8 @@ export default function TaskList({ filter }: TaskListProps) {
         taskListId: filter === 'today' || filter === 'all' || filter === 'completed' || filter === 'important'
           ? 'today' 
           : filter,
+        // If adding to My Day, set due date to today
+        dueDate: filter === 'today' ? today : undefined,
         // 如果当前 filter 是目标 ID，则自动关联到该目标
         goalId: isGoalFilter ? filter : undefined
       });
@@ -166,7 +172,12 @@ export default function TaskList({ filter }: TaskListProps) {
    * Add a task to My Day
    */
   const handleAddToMyDay = (taskId: string) => {
-    updateTask(taskId, { taskListId: 'today' });
+    // Set the task's due date to today and update the taskListId
+    const today = new Date().toISOString().split('T')[0];
+    updateTask(taskId, { 
+      taskListId: 'today',
+      dueDate: today
+    });
   };
 
   /**

@@ -244,9 +244,12 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
    * Handle adding task to today's list
    */
   const handleAddToToday = () => {
+    // Set the task's due date to today and update the taskListId
+    const today = new Date().toISOString().split('T')[0];
     const updatedTask = {
       ...editedTask,
-      taskListId: 'today'
+      taskListId: 'today',
+      dueDate: today
     };
     setEditedTask(updatedTask);
     // Auto-save when adding to today
@@ -679,48 +682,50 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 )}
               </div>
               
-              {/* Priority */}
-              <div className="relative">
-                <button
-                  className="flex items-center justify-between w-full p-2.5 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
-                  onClick={() => setIsPriorityOpen(!isPriorityOpen)}
-                >
-                  <div className="flex items-center">
-                    <Flag size={18} className={`${priorityInfo.color} mr-3`} />
-                    <span>{priorityInfo.label}</span>
-                  </div>
-                  <ChevronDown size={16} className="text-gray-400" />
-                </button>
-                
-                {/* Priority dropdown */}
-                {isPriorityOpen && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 priority-dropdown">
-                    <div className="p-2 space-y-1">
-                      <button
-                        className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
-                        onClick={() => handlePriorityChange('high')}
-                      >
-                        <Flag size={16} className="text-red-600 mr-2" />
-                        <span>高优先级</span>
-                      </button>
-                      <button
-                        className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
-                        onClick={() => handlePriorityChange('medium')}
-                      >
-                        <Flag size={16} className="text-orange-500 mr-2" />
-                        <span>中等优先级</span>
-                      </button>
-                      <button
-                        className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
-                        onClick={() => handlePriorityChange('low')}
-                      >
-                        <Flag size={16} className="text-blue-500 mr-2" />
-                        <span>低优先级</span>
-                      </button>
+              {/* Priority section hidden temporarily as requested */}
+              {false && (
+                <div className="relative">
+                  <button
+                    className="flex items-center justify-between w-full p-2.5 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
+                    onClick={() => setIsPriorityOpen(!isPriorityOpen)}
+                  >
+                    <div className="flex items-center">
+                      <Flag size={18} className={`${priorityInfo.color} mr-3`} />
+                      <span>{priorityInfo.label}</span>
                     </div>
-                  </div>
-                )}
-              </div>
+                    <ChevronDown size={16} className="text-gray-400" />
+                  </button>
+                  
+                  {/* Priority dropdown */}
+                  {isPriorityOpen && (
+                    <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 priority-dropdown">
+                      <div className="p-2 space-y-1">
+                        <button
+                          className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
+                          onClick={() => handlePriorityChange('high')}
+                        >
+                          <Flag size={16} className="text-red-600 mr-2" />
+                          <span>高优先级</span>
+                        </button>
+                        <button
+                          className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
+                          onClick={() => handlePriorityChange('medium')}
+                        >
+                          <Flag size={16} className="text-orange-500 mr-2" />
+                          <span>中等优先级</span>
+                        </button>
+                        <button
+                          className="flex items-center w-full p-2 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
+                          onClick={() => handlePriorityChange('low')}
+                        >
+                          <Flag size={16} className="text-blue-500 mr-2" />
+                          <span>低优先级</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Goal selector - 新增 */}
               <div className="relative">

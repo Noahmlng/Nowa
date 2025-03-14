@@ -185,7 +185,7 @@ export default function GoalList() {
               return (
                 <li 
                   key={goal.id}
-                  className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer"
+                  className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer group"
                   onClick={() => handleOpenDetail(goal)}
                 >
                   {/* Progress background overlay */}
@@ -259,10 +259,10 @@ export default function GoalList() {
                       </div>
                     </div>
                     
-                    {/* Key Results section - always shown */}
+                    {/* Key Results section - only shown if there are key results */}
                     <div className="mt-3">
                       {/* Key Results list */}
-                      {goalKeyResults.length > 0 ? (
+                      {goalKeyResults.length > 0 && (
                         <ul className="space-y-1.5 mt-1.5">
                           {goalKeyResults.map(kr => (
                             <li 
@@ -326,34 +326,56 @@ export default function GoalList() {
                             </li>
                           ))}
                         </ul>
-                      ) : (
-                        <p className="text-sm text-gray-500 italic">暂无子目标</p>
                       )}
                       
-                      {/* Add new key result input */}
-                      <div className="mt-2.5 flex items-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          className="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
-                          placeholder="添加新的子目标..."
-                          value={newKeyResultTitle[goal.id] || ''}
-                          onChange={(e) => setNewKeyResultTitle({
-                            ...newKeyResultTitle,
-                            [goal.id]: e.target.value
-                          })}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault(); // 阻止默认行为，防止表单提交
-                              handleAddKeyResult(goal.id);
-                            }
-                          }}
-                        />
-                        <button
-                          className="ml-2 p-1.5 bg-purple-500 text-white rounded-md hover:bg-purple-600"
-                          onClick={() => handleAddKeyResult(goal.id)}
-                        >
-                          <Plus size={16} />
-                        </button>
+                      {/* New add key result control that looks like an inactive key result */}
+                      <div 
+                        className={`h-0 opacity-0 group-hover:opacity-100 group-hover:h-auto group-hover:mt-1.5 transition-all duration-200 overflow-hidden`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {newKeyResultTitle[goal.id] ? (
+                          <div className="flex items-center">
+                            <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                            <input
+                              type="text"
+                              className="flex-1 border-b border-gray-300 focus:outline-none focus:border-purple-500 py-1 px-0 text-sm bg-transparent"
+                              placeholder="输入新的子目标..."
+                              value={newKeyResultTitle[goal.id] || ''}
+                              onChange={(e) => setNewKeyResultTitle({
+                                ...newKeyResultTitle,
+                                [goal.id]: e.target.value
+                              })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault(); // 阻止默认行为，防止表单提交
+                                  handleAddKeyResult(goal.id);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!newKeyResultTitle[goal.id]?.trim()) {
+                                  setNewKeyResultTitle({
+                                    ...newKeyResultTitle,
+                                    [goal.id]: ''
+                                  });
+                                }
+                              }}
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center cursor-pointer"
+                            onClick={() => setNewKeyResultTitle({
+                              ...newKeyResultTitle,
+                              [goal.id]: ' ' // Set to space to trigger input mode
+                            })}
+                          >
+                            <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                            <span className="flex-1 text-sm text-gray-400 py-1 px-2 hover:bg-gray-100 rounded">
+                              新的子目标
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

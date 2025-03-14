@@ -410,125 +410,127 @@ export default function GoalDetail({ goal, isOpen, onClose }: GoalDetailProps) {
           
           {/* Key Results section */}
           <div className="mb-6">
-            <div className="flex justify-end mb-3">
-              <button 
-                className="text-sm text-purple-500 hover:text-purple-700 flex items-center"
-                onClick={() => setShowNewKeyResultInput(true)}
-              >
-                <Plus size={16} className="mr-1" />
-                添加
-              </button>
-            </div>
+            {/* Only show the header if there are key results */}
+            {goalKeyResults.length > 0 && (
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-md font-medium">子目标</h3>
+              </div>
+            )}
             
             {/* Key Results list */}
-            <ul className="space-y-2 mb-4">
-              {goalKeyResults.map(kr => (
-                <li key={kr.id} className="group">
-                  <div className="flex items-center border border-gray-100 rounded-md p-2 hover:bg-gray-50 relative overflow-hidden">
-                    <button
-                      className="mr-3 flex-shrink-0"
-                      onClick={() => handleToggleKeyResultComplete(kr.id, kr.status)}
-                      aria-label={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
-                    >
-                      {kr.status === 'completed' ? (
-                        <CheckCircle2 size={18} className="text-green-500" />
-                      ) : (
-                        <Circle size={18} className="text-gray-400" />
-                      )}
-                    </button>
-                    
-                    {/* 完成动画效果 - 划线 */}
-                    {(kr.status === 'completed' || completingKeyResultId === kr.id) && (
-                      <div 
-                        className="absolute h-[1px] bg-gray-400 left-0 top-1/2 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
-                        style={{ 
-                          width: completingKeyResultId === kr.id ? '100%' : (kr.status === 'completed' ? '100%' : '0%'),
-                          opacity: completingKeyResultId === kr.id ? 1 : (kr.status === 'completed' ? 1 : 0)
-                        }}
-                      />
-                    )}
-                    
-                    {editingKeyResultId === kr.id ? (
-                      <div className="flex-1">
-                        <input
-                          ref={keyResultInputRef}
-                          type="text"
-                          className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm bg-transparent"
-                          value={editingKeyResultTitle}
-                          onChange={(e) => setEditingKeyResultTitle(e.target.value)}
-                          onBlur={handleSaveKeyResultTitle}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault(); // 阻止默认行为，防止表单提交
-                              handleSaveKeyResultTitle();
-                            }
+            {goalKeyResults.length > 0 && (
+              <ul className="space-y-2 mb-2">
+                {goalKeyResults.map(kr => (
+                  <li key={kr.id} className="group">
+                    <div className="flex items-center border border-gray-100 rounded-md p-2 hover:bg-gray-50 relative overflow-hidden">
+                      <button
+                        className="mr-3 flex-shrink-0"
+                        onClick={() => handleToggleKeyResultComplete(kr.id, kr.status)}
+                        aria-label={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
+                      >
+                        {kr.status === 'completed' ? (
+                          <CheckCircle2 size={18} className="text-green-500" />
+                        ) : (
+                          <Circle size={18} className="text-gray-400" />
+                        )}
+                      </button>
+                      
+                      {/* 完成动画效果 - 划线 */}
+                      {(kr.status === 'completed' || completingKeyResultId === kr.id) && (
+                        <div 
+                          className="absolute h-[1px] bg-gray-400 left-0 top-1/2 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
+                          style={{ 
+                            width: completingKeyResultId === kr.id ? '100%' : (kr.status === 'completed' ? '100%' : '0%'),
+                            opacity: completingKeyResultId === kr.id ? 1 : (kr.status === 'completed' ? 1 : 0)
                           }}
                         />
-                      </div>
-                    ) : (
-                      <span 
-                        className={`flex-1 text-sm ${kr.status === 'completed' ? 'text-gray-500' : 'text-gray-700'} py-1 px-2 rounded cursor-text`}
-                        onClick={() => handleStartEditingKeyResult(kr)}
+                      )}
+                      
+                      {editingKeyResultId === kr.id ? (
+                        <div className="flex-1">
+                          <input
+                            ref={keyResultInputRef}
+                            type="text"
+                            className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm bg-transparent"
+                            value={editingKeyResultTitle}
+                            onChange={(e) => setEditingKeyResultTitle(e.target.value)}
+                            onBlur={handleSaveKeyResultTitle}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault(); // 阻止默认行为，防止表单提交
+                                handleSaveKeyResultTitle();
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          className={`flex-1 text-sm ${kr.status === 'completed' ? 'text-gray-500' : 'text-gray-700'} py-1 px-2 rounded cursor-text`}
+                          onClick={() => handleStartEditingKeyResult(kr)}
+                        >
+                          {kr.title}
+                        </span>
+                      )}
+                      
+                      <button
+                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          try {
+                            console.log("Deleting key result:", kr.id);
+                            deleteKeyResult(kr.id);
+                          } catch (error) {
+                            console.error("Error deleting key result:", error);
+                          }
+                        }}
+                        aria-label="删除子目标"
                       >
-                        {kr.title}
-                      </span>
-                    )}
-                    
-                    <button
-                      className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        try {
-                          console.log("Deleting key result:", kr.id);
-                          deleteKeyResult(kr.id);
-                        } catch (error) {
-                          console.error("Error deleting key result:", error);
-                        }
-                      }}
-                      aria-label="删除子目标"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            
-            {/* Add new key result form - 简洁设计 */}
-            {showNewKeyResultInput ? (
-              <div className="flex items-center mb-4 border border-gray-200 rounded-md p-2 bg-gray-50">
-                <Circle size={18} className="text-gray-300 mr-2" />
-                <input
-                  ref={newKeyResultInputRef}
-                  type="text"
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm"
-                  placeholder="输入新的子目标..."
-                  value={newKeyResultTitle}
-                  onChange={(e) => setNewKeyResultTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault(); // 阻止默认行为，防止表单提交
-                      handleAddKeyResult();
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!newKeyResultTitle.trim()) {
-                      setShowNewKeyResultInput(false);
-                    }
-                  }}
-                />
-                <button
-                  className="ml-2 p-1 text-purple-500 hover:text-purple-700 rounded-full"
-                  onClick={() => handleAddKeyResult()}
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-            ) : (
-              goalKeyResults.length === 0 && (
-                <p className="text-sm text-gray-500 italic mb-4">点击"添加"按钮创建子目标</p>
-              )
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
+            
+            {/* New add key result control that looks like an inactive key result */}
+            <div className={`group ${goalKeyResults.length === 0 ? 'opacity-0 hover:opacity-100' : ''}`}>
+              {showNewKeyResultInput ? (
+                <div className="flex items-center border border-gray-100 rounded-md p-2 bg-gray-50">
+                  <Circle size={18} className="text-gray-300 mr-3 flex-shrink-0" />
+                  <input
+                    ref={newKeyResultInputRef}
+                    type="text"
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm"
+                    placeholder="输入新的子目标..."
+                    value={newKeyResultTitle}
+                    onChange={(e) => setNewKeyResultTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault(); // 阻止默认行为，防止表单提交
+                        handleAddKeyResult();
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!newKeyResultTitle.trim()) {
+                        setShowNewKeyResultInput(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div 
+                  className="flex items-center border border-gray-100 rounded-md p-2 bg-gray-50 hover:bg-gray-100 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setShowNewKeyResultInput(true)}
+                >
+                  <Circle size={18} className="text-gray-300 mr-3 flex-shrink-0" />
+                  <span className="flex-1 text-sm text-gray-400 py-1 px-2">
+                    新的子目标
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
           
           {/* 关联任务部分 */}

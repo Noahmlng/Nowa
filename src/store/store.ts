@@ -10,6 +10,19 @@ interface User {
 }
 
 /**
+ * UserProfile interface - Represents additional user information
+ */
+interface UserProfile {
+  weight?: string;                                 // User's weight
+  height?: string;                                 // User's height
+  personality?: string[];                          // User's personality traits
+  interests?: string[];                            // User's interests
+  hobbies?: string[];                              // User's hobbies
+  goals?: string[];                                // User's personal goals
+  notes?: string;                                  // Additional notes
+}
+
+/**
  * Task interface - Represents a task in the application
  * Based on the Task model from models.js
  */
@@ -76,6 +89,7 @@ interface TaskList {
 interface AppState {
   // State
   user: User;                                      // User information
+  userProfile: UserProfile;                        // User profile information
   tasks: Task[];                                   // Array of all tasks
   goals: Goal[];                                   // Array of all goals
   keyResults: KeyResult[];                         // Array of all key results
@@ -84,6 +98,7 @@ interface AppState {
   
   // User actions
   updateUser: (user: Partial<User>) => void;       // Update user information
+  updateUserProfile: (profile: Partial<UserProfile>) => void; // Update user profile information
   
   // Task actions
   addTask: (task: Omit<Task, 'id'>) => void;       // Add a new task (ID is generated automatically)
@@ -126,6 +141,15 @@ export const useAppStore = create<AppState>()(
         nickname: 'Noah',
         tags: ['Builder', '努力减重中']
       },
+      userProfile: {
+        weight: '70kg',
+        height: '175cm',
+        personality: ['Focused', 'Creative', 'Analytical'],
+        interests: ['AI', 'Programming', 'Reading'],
+        hobbies: ['Running', 'Photography', 'Cooking'],
+        goals: ['Learn a new language', 'Run a marathon'],
+        notes: ''
+      },
       tasks: [],
       goals: [],
       keyResults: [],
@@ -140,6 +164,10 @@ export const useAppStore = create<AppState>()(
       // User actions
       updateUser: (userData) => set((state) => ({
         user: { ...state.user, ...userData }
+      })),
+      
+      updateUserProfile: (profileData) => set((state) => ({
+        userProfile: { ...state.userProfile, ...profileData }
       })),
       
       // Task actions implementation

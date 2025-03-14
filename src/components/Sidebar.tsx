@@ -16,9 +16,11 @@ import {
   Moon,
   Zap,
   X,
-  Briefcase
+  Briefcase,
+  User
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
+import UserProfileModal from './UserProfileModal';
 
 /**
  * Custom icon component for the "All Tasks" section
@@ -54,6 +56,7 @@ export default function Sidebar() {
   const [newListName, setNewListName] = useState(''); // New list name input value
   const [userStatus, setUserStatus] = useState<{id: string, label: string, icon: JSX.Element} | null>(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // 检查状态是否过期（每天24点自动失效）
   useEffect(() => {
@@ -121,10 +124,10 @@ export default function Sidebar() {
     let filteredTasks = tasks.filter(task => task.status !== 'completed');
     
     if (listId === 'today') {
-      // For "My Day", count tasks that are due today or have no due date
+      // For "My Day", only count tasks that are due today
       const today = new Date().toISOString().split('T')[0];
       return filteredTasks.filter(task => 
-        (task.dueDate && task.dueDate.startsWith(today)) || !task.dueDate
+        task.dueDate && task.dueDate.startsWith(today)
       ).length;
     } else if (listId === 'important') {
       // For "Important", count important tasks
@@ -155,13 +158,22 @@ export default function Sidebar() {
       <div className="py-6 px-4 border-b border-gray-100 relative">
         <div className="flex items-center">
           <h2 className="text-xl font-semibold text-gray-800">{user.nickname}</h2>
-          <div className="ml-2 px-2.5 py-0.5 bg-gray-100 rounded-md">
+          <div 
+            className="ml-2 px-2.5 py-0.5 bg-gray-100 rounded-md cursor-pointer hover:bg-gray-200 transition-colors"
+            onClick={() => setIsProfileModalOpen(true)}
+          >
             <div className="flex items-center">
-              <Briefcase size={10} className="text-gray-500 mr-1" />
-              <span className="text-xs font-medium text-gray-600">Workspace</span>
+              <User size={10} className="text-gray-500 mr-1" />
+              <span className="text-xs font-medium text-gray-600">About Me</span>
             </div>
           </div>
         </div>
+        
+        {/* User Profile Modal */}
+        <UserProfileModal 
+          isOpen={isProfileModalOpen} 
+          onClose={() => setIsProfileModalOpen(false)} 
+        />
         
         {/* 用户状态区域 */}
         <div 
