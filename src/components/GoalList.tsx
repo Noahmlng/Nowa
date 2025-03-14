@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Edit2, Trash2, Target } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Trash2, Plus, Calendar, CheckCircle2, Circle, Target, ArrowDown } from 'lucide-react';
+import GoalDetail from '@/components/GoalDetail';
 import { useAppStore } from '@/store/store';
+import { format, parseISO } from 'date-fns';
 
 /**
  * Goal interface - Represents a goal in the application
@@ -12,29 +14,68 @@ interface Goal {
   id: string;
   title: string;
   description?: string;
-  category?: string;
+  dueDate?: string;
   progress: number;
   status: 'active' | 'completed' | 'cancelled';
-  startDate?: string;
-  endDate?: string;
-  finishDate?: string;
+  taskIds: string[];
+}
+
+/**
+ * KeyResult interface - Represents a key result for a goal
+ */
+interface KeyResult {
+  id: string;
+  goalId: string;
+  title: string;
+  status: 'pending' | 'completed';
 }
 
 /**
  * GoalList Component
  * 
- * Displays a list of user goals with progress tracking.
- * Allows adding new goals, editing existing goals, and tracking progress.
- * Provides a modal interface for detailed goal editing.
+ * Displays a list of goals, allows creating new goals and opening goal details.
  */
 export default function GoalList() {
   // Get goals and goal actions from the global store
-  const { goals, addGoal, updateGoal, deleteGoal, updateGoalProgress } = useAppStore();
+  const { 
+    goals, 
+    keyResults, 
+    addGoal, 
+    deleteGoal, 
+    addKeyResult, 
+    toggleKeyResultComplete, 
+    deleteKeyResult,
+    updateKeyResult,
+    updateGoal
+  } = useAppStore();
   
   // Local state
   const [newGoalTitle, setNewGoalTitle] = useState(''); // For the new goal input
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null); // Currently editing goal
-  const [isEditing, setIsEditing] = useState(false); // Whether the edit modal is open
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null); // Currently selected goal for showing details
+  const [isDetailOpen, setIsDetailOpen] = useState(false); // Whether the goal detail modal is open
+  const [newKeyResultTitle, setNewKeyResultTitle] = useState<{[goalId: string]: string}>({});
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [editingGoalTitle, setEditingGoalTitle] = useState('');
+  const [editingKeyResultId, setEditingKeyResultId] = useState<string | null>(null);
+  const [editingKeyResultTitle, setEditingKeyResultTitle] = useState('');
+  
+  // Refs for focus management
+  const goalTitleInputRef = useRef<HTMLInputElement>(null);
+  const keyResultInputRef = useRef<HTMLInputElement>(null);
+  
+  // Focus title input when editing mode is activated
+  useEffect(() => {
+    if (editingGoalId && goalTitleInputRef.current) {
+      goalTitleInputRef.current.focus();
+    }
+  }, [editingGoalId]);
+  
+  // Focus key result input when editing mode is activated
+  useEffect(() => {
+    if (editingKeyResultId && keyResultInputRef.current) {
+      keyResultInputRef.current.focus();
+    }
+  }, [editingKeyResultId]);
 
   /**
    * Handle adding a new goal
@@ -44,9 +85,9 @@ export default function GoalList() {
     if (newGoalTitle.trim()) {
       addGoal({
         title: newGoalTitle.trim(),
-        description: '',
         progress: 0,
         status: 'active',
+        taskIds: [],
       });
       
       setNewGoalTitle(''); // Clear the input after adding
@@ -54,211 +95,318 @@ export default function GoalList() {
   };
 
   /**
-   * Open the edit modal for a specific goal
+   * Handle adding a new key result to a goal
    */
-  const handleEditGoal = (goal: Goal) => {
-    setEditingGoal(goal);
-    setIsEditing(true);
+  const handleAddKeyResult = (goalId: string) => {
+    const title = newKeyResultTitle[goalId]?.trim();
+    if (title) {
+      addKeyResult({
+        goalId,
+        title,
+        status: 'pending',
+      });
+      
+      // Clear the input after adding
+      setNewKeyResultTitle({
+        ...newKeyResultTitle,
+        [goalId]: ''
+      });
+    }
   };
 
   /**
-   * Update a goal with new values from the edit modal
+   * Open the goal detail modal for a specific goal
    */
-  const handleUpdateGoal = (updatedGoal: Goal) => {
-    updateGoal(updatedGoal.id, updatedGoal);
-    setIsEditing(false);
-    setEditingGoal(null);
+  const handleOpenDetail = (goal: Goal) => {
+    setSelectedGoal(goal);
+    setIsDetailOpen(true);
   };
 
   /**
-   * Cancel the goal editing process and close the modal
+   * Close the goal detail modal
    */
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditingGoal(null);
+  const handleCloseDetail = () => {
+    setSelectedGoal(null);
+    setIsDetailOpen(false);
   };
 
   /**
-   * Update the progress of a goal using the progress slider
+   * Get key results for a specific goal
    */
-  const handleProgressChange = (goalId: string, progress: number) => {
-    updateGoalProgress(goalId, progress);
+  const getGoalKeyResults = (goalId: string) => {
+    return keyResults.filter(kr => kr.goalId === goalId);
+  };
+  
+  /**
+   * Start editing a goal title
+   */
+  const handleStartEditingGoal = (goal: Goal, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening goal detail
+    setEditingGoalId(goal.id);
+    setEditingGoalTitle(goal.title);
+  };
+  
+  /**
+   * Save edited goal title
+   */
+  const handleSaveGoalTitle = () => {
+    if (editingGoalId && editingGoalTitle.trim()) {
+      updateGoal(editingGoalId, { title: editingGoalTitle });
+      setEditingGoalId(null);
+    }
+  };
+  
+  /**
+   * Start editing a key result title
+   */
+  const handleStartEditingKeyResult = (keyResult: KeyResult, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening goal detail
+    setEditingKeyResultId(keyResult.id);
+    setEditingKeyResultTitle(keyResult.title);
+  };
+  
+  /**
+   * Save edited key result title
+   */
+  const handleSaveKeyResultTitle = () => {
+    if (editingKeyResultId && editingKeyResultTitle.trim()) {
+      updateKeyResult(editingKeyResultId, { title: editingKeyResultTitle });
+      setEditingKeyResultId(null);
+    }
   };
 
   return (
-    <div className="space-y-8">
-      {/* Add new goal input */}
-      <div className="flex items-center space-x-2 mb-6">
-        <input
-          type="text"
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Add a new goal..."
-          value={newGoalTitle}
-          onChange={(e) => setNewGoalTitle(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
-        />
-        <button
-          className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          onClick={handleAddGoal}
-        >
-          <Plus size={20} />
-        </button>
-      </div>
-
-      {/* Goals list - displays all goals or an empty state */}
-      <div className="space-y-4">
-        {goals.length === 0 ? (
-          // Empty state when no goals exist
-          <div className="text-center py-8">
-            <Target size={48} className="mx-auto text-gray-300 mb-2" />
-            <p className="text-gray-500">No goals yet. Add your first goal to get started!</p>
-          </div>
-        ) : (
-          // Map through and display each goal
-          goals.map(goal => (
-            <div 
-              key={goal.id} 
-              className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow"
-            >
-              {/* Goal header with title and action buttons */}
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-medium">{goal.title}</h3>
-                <div className="flex space-x-1">
-                  <button
-                    className="p-1 text-gray-400 hover:text-blue-600"
-                    onClick={() => handleEditGoal(goal)}
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button
-                    className="p-1 text-gray-400 hover:text-red-600"
-                    onClick={() => deleteGoal(goal.id)}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Goal description (if available) */}
-              {goal.description && (
-                <p className="text-gray-600 mb-3">{goal.description}</p>
-              )}
-              
-              {/* Progress bar visualization */}
-              <div className="mb-2">
-                <div className="flex justify-between text-sm text-gray-500 mb-1">
-                  <span>Progress</span>
-                  <span>{Math.round(goal.progress * 100)}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-auto pb-20">
+        <ul className="space-y-3">
+          {goals.length > 0 ? (
+            goals.map(goal => {
+              const goalKeyResults = getGoalKeyResults(goal.id);
+              return (
+                <li 
+                  key={goal.id}
+                  className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer"
+                  onClick={() => handleOpenDetail(goal)}
+                >
+                  {/* Progress background overlay */}
                   <div 
-                    className="bg-blue-600 h-2.5 rounded-full" 
-                    style={{ width: `${goal.progress * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              
-              {/* Goal footer with category and progress slider */}
-              <div className="flex justify-between items-center mt-4">
-                {goal.category && (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                    {goal.category}
-                  </span>
-                )}
-                
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={goal.progress * 100}
-                  onChange={(e) => handleProgressChange(goal.id, Number(e.target.value) / 100)}
-                  className="w-1/2"
-                />
+                    className="absolute inset-0 bg-purple-50 pointer-events-none" 
+                    style={{ width: `${goal.progress}%` }}
+                  />
+                  
+                  {/* Goal card content - above the background */}
+                  <div className="relative p-3.5">
+                    {/* Goal title and action buttons */}
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 group">
+                        <div className="flex items-start">
+                          {/* 移除完成标记 */}
+                          
+                          {editingGoalId === goal.id ? (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <input
+                                ref={goalTitleInputRef}
+                                type="text"
+                                className="w-full text-base font-medium border-b border-purple-500 focus:outline-none py-1 px-0"
+                                value={editingGoalTitle}
+                                onChange={(e) => setEditingGoalTitle(e.target.value)}
+                                onBlur={handleSaveGoalTitle}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault(); // 阻止默认行为，防止表单提交
+                                    handleSaveGoalTitle();
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div>
+                              <h3 
+                                className="text-base font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text group-hover:bg-gray-100"
+                                onClick={(e) => handleStartEditingGoal(goal, e)}
+                              >
+                                {goal.title}
+                              </h3>
+                              {goal.description && (
+                                <p className="text-sm text-gray-600 mt-0.5">{goal.description}</p>
+                              )}
+                              {goal.dueDate && (
+                                <div className="flex items-center mt-1 text-xs text-gray-500">
+                                  <Calendar size={12} className="mr-1" />
+                                  <span>{format(parseISO(goal.dueDate), 'MMMM d, yyyy')}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-1 shrink-0">
+                        <div className="text-xs font-medium text-purple-700 mr-2 flex items-center">
+                          {goalKeyResults.filter(kr => kr.status === 'completed').length}/{goalKeyResults.length} 完成
+                        </div>
+                        {/* 移除编辑按钮，只保留删除按钮 */}
+                        <button
+                          className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent opening goal detail
+                            deleteGoal(goal.id);
+                          }}
+                          title="删除目标"
+                        >
+                          <Trash2 size={16} className="text-gray-400 hover:text-red-500" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Key Results section - always shown */}
+                    <div className="mt-3">
+                      {/* Key Results list */}
+                      {goalKeyResults.length > 0 ? (
+                        <ul className="space-y-1.5 mt-1.5">
+                          {goalKeyResults.map(kr => (
+                            <li 
+                              key={kr.id} 
+                              className="flex items-center group"
+                              onClick={(e) => e.stopPropagation()} // Prevent opening goal detail
+                            >
+                              <button
+                                className="mr-2 flex-shrink-0"
+                                onClick={() => toggleKeyResultComplete(kr.id)}
+                                title={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
+                              >
+                                {kr.status === 'completed' ? (
+                                  <CheckCircle2 size={16} className="text-green-500" />
+                                ) : (
+                                  <Circle size={16} className="text-gray-400" />
+                                )}
+                              </button>
+                              
+                              {editingKeyResultId === kr.id ? (
+                                <div className="flex-1">
+                                  <input
+                                    ref={keyResultInputRef}
+                                    type="text"
+                                    className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm"
+                                    value={editingKeyResultTitle}
+                                    onChange={(e) => setEditingKeyResultTitle(e.target.value)}
+                                    onBlur={handleSaveKeyResultTitle}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault(); // 阻止默认行为，防止表单提交
+                                        handleSaveKeyResultTitle();
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <span 
+                                  className={`flex-1 text-sm ${kr.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-700'} hover:bg-gray-100 py-1 px-2 rounded cursor-text`}
+                                  onClick={(e) => handleStartEditingKeyResult(kr, e)}
+                                >
+                                  {kr.title}
+                                </span>
+                              )}
+                              
+                              <button
+                                className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    console.log("Deleting key result:", kr.id);
+                                    deleteKeyResult(kr.id);
+                                  } catch (error) {
+                                    console.error("Error deleting key result:", error);
+                                  }
+                                }}
+                                title="删除子目标"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">暂无子目标</p>
+                      )}
+                      
+                      {/* Add new key result input */}
+                      <div className="mt-2.5 flex items-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          className="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="添加新的子目标..."
+                          value={newKeyResultTitle[goal.id] || ''}
+                          onChange={(e) => setNewKeyResultTitle({
+                            ...newKeyResultTitle,
+                            [goal.id]: e.target.value
+                          })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault(); // 阻止默认行为，防止表单提交
+                              handleAddKeyResult(goal.id);
+                            }
+                          }}
+                        />
+                        <button
+                          className="ml-2 p-1.5 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                          onClick={() => handleAddKeyResult(goal.id)}
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })
+          ) : (
+            <div className="text-center py-12 bg-white rounded-lg shadow flex flex-col items-center">
+              <Target size={48} className="text-gray-300 mb-4" />
+              <p className="text-gray-500 mb-4">暂无目标</p>
+              <div className="flex items-center text-sm text-purple-500">
+                <ArrowDown size={16} className="mr-1 animate-bounce" />
+                <span>在下方添加你的第一个目标</span>
               </div>
             </div>
-          ))
-        )}
+          )}
+        </ul>
       </div>
 
-      {/* Edit goal modal - appears when editing a goal */}
-      {isEditing && editingGoal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Edit Goal</h2>
-            
-            <div className="space-y-4">
-              {/* Title input field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.title}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, title: e.target.value })}
-                />
-              </div>
-              
-              {/* Description textarea */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.description || ''}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, description: e.target.value })}
-                />
-              </div>
-              
-              {/* Category input field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editingGoal.category || ''}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, category: e.target.value })}
-                  placeholder="e.g. Health, Career, Personal"
-                />
-              </div>
-              
-              {/* Progress slider */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Progress ({Math.round(editingGoal.progress * 100)}%)
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={editingGoal.progress * 100}
-                  onChange={(e) => setEditingGoal({ ...editingGoal, progress: Number(e.target.value) / 100 })}
-                  className="w-full"
-                />
-              </div>
-            </div>
-            
-            {/* Modal action buttons */}
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                onClick={handleCancelEdit}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                onClick={() => handleUpdateGoal(editingGoal)}
-              >
-                Save
-              </button>
-            </div>
+      {/* Add new goal input - fixed at the bottom */}
+      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-purple-100 shadow-md p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white shadow-sm text-sm"
+              placeholder="添加新目标..."
+              value={newGoalTitle}
+              onChange={(e) => setNewGoalTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault(); // 阻止默认行为，防止表单提交
+                  handleAddGoal();
+                }
+              }}
+            />
+            <button
+              className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg shadow-sm transition-colors"
+              onClick={handleAddGoal}
+            >
+              <Plus size={18} />
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* Goal detail modal - opens when a goal is selected */}
+      {selectedGoal && (
+        <GoalDetail
+          goal={selectedGoal}
+          isOpen={isDetailOpen}
+          onClose={handleCloseDetail}
+        />
       )}
     </div>
   );
