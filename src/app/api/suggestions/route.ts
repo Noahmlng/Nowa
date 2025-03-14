@@ -52,7 +52,7 @@ async function generateSuggestions(
         messages: [
           {
             role: 'system',
-            content: '你是一个专注于个人任务规划的AI助手。你的目标是基于用户的个人资料和最近反馈，提供简洁、具体且可操作的任务建议。请使用中文回复，保持绝对简洁清晰，确保建议可直接执行。'
+            content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
           },
           {
             role: 'user',
@@ -60,7 +60,9 @@ async function generateSuggestions(
           }
         ],
         temperature: 0.7,
-        max_tokens: 500
+        top_p: 0.7,
+        max_tokens: 800,
+        presence_penalty: 0.2
       })
     });
 
@@ -92,37 +94,71 @@ function constructSuggestionPrompt(
   userProfile: any,
   recentFeedback?: string
 ): string {
-  let prompt = `请基于以下用户信息，为任务"${taskTitle}"生成三个具体的计划选项：\n\n`;
+  let prompt = `请处理任务「${taskTitle}」：\n\n`;
   
-  // Add physical data if available
-  if (userProfile.height || userProfile.weight) {
-    prompt += '身体数据：\n';
-    if (userProfile.height) prompt += `- 身高：${userProfile.height}\n`;
-    if (userProfile.weight) prompt += `- 体重：${userProfile.weight}\n`;
-  }
+  // Add user profile information
+  prompt += '【用户画像】\n';
+  prompt += '◆ 基础档案：';
+  const basicInfo = [];
+  if (userProfile.age) basicInfo.push(`年龄 ${userProfile.age}`);
+  if (userProfile.occupation) basicInfo.push(`职业 ${userProfile.occupation}`);
+  if (userProfile.location) basicInfo.push(`地理位置 ${userProfile.location}`);
+  if (userProfile.height) basicInfo.push(`身高 ${userProfile.height}`);
+  if (userProfile.weight) basicInfo.push(`体重 ${userProfile.weight}`);
+  prompt += basicInfo.join('、') + '\n';
   
-  // Add user interests, hobbies, goals
-  if (userProfile.interests && userProfile.interests.length > 0) {
-    prompt += `\n兴趣爱好：${userProfile.interests.join('、')}\n`;
+  // Add ability characteristics
+  prompt += '◆ 能力特征：';
+  const abilities = [];
+  if (userProfile.strengths && userProfile.strengths.length > 0) {
+    abilities.push(`优势 ${userProfile.strengths.join('、')}`);
   }
-  if (userProfile.hobbies && userProfile.hobbies.length > 0) {
-    prompt += `\n爱好：${userProfile.hobbies.join('、')}\n`;
+  if (userProfile.weaknesses && userProfile.weaknesses.length > 0) {
+    abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
   }
+  prompt += abilities.join('、') + '\n';
+  
+  // Add historical trajectory
+  prompt += '◆ 历史轨迹：';
+  if (userProfile.history) {
+    prompt += userProfile.history;
+  } else if (recentFeedback) {
+    prompt += recentFeedback;
+  } else {
+    prompt += '无历史记录';
+  }
+  prompt += '\n\n';
+  
+  // Add task context
+  prompt += '【任务上下文】\n';
+  prompt += `★ 显性需求：${taskTitle}\n`;
+  
+  // Add implicit needs based on goals
+  prompt += '★ 隐性需求：';
   if (userProfile.goals && userProfile.goals.length > 0) {
-    prompt += `\n目标：${userProfile.goals.join('、')}\n`;
+    prompt += userProfile.goals.join('、');
+  } else {
+    prompt += '未明确';
   }
+  prompt += '\n';
   
-  // Add recent feedback if available
-  if (recentFeedback) {
-    prompt += `\n最近反馈：${recentFeedback}\n`;
+  // Add constraints
+  prompt += '★ 约束条件：';
+  const constraints = [];
+  if (userProfile.timeConstraints) constraints.push(`时间 ${userProfile.timeConstraints}`);
+  if (userProfile.resourceConstraints) constraints.push(`资源 ${userProfile.resourceConstraints}`);
+  if (userProfile.restrictions && userProfile.restrictions.length > 0) {
+    constraints.push(`限制 ${userProfile.restrictions.join('、')}`);
   }
+  prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
+  prompt += '\n\n';
   
-  // Add notes if available
-  if (userProfile.notes) {
-    prompt += `\n附加说明：${userProfile.notes}\n`;
-  }
-  
-  prompt += `\n请提供三个简洁具体的计划选项（每个1-2句话），针对这个任务的不同方法。直接明了，可立即执行。不要编号，不要解释，只需提供三个建议，每个建议用换行符分隔。请使用中文回复。`;
+  // Add interaction mode with new constraints
+  prompt += '【交互模式】\n';
+  prompt += '▸ 输出格式：提供3个简短建议，每个建议必须以疑问句开头，后跟简短方案\n';
+  prompt += '▸ 语气要求：专业、亲切、激励\n';
+  prompt += '▸ 长度限制：每个建议不超过20个字符\n';
+  prompt += '▸ 输出示例：\n1. 髋关节好些了吗？做恢复训练\n2. 想增强核心吗？尝试平板支撑\n3. 需要放松吗？试试瑜伽拉伸\n';
   
   return prompt;
 }
@@ -131,16 +167,35 @@ function constructSuggestionPrompt(
  * Parse suggestions from DeepSeek API response
  */
 function parseSuggestions(content: string): string[] {
-  // Split by newlines and filter out empty lines
-  const lines = content.split('\n').filter(line => line.trim().length > 0);
-  
-  // Ensure we have exactly three suggestions
-  const suggestions = lines.slice(0, 3);
-  
-  // If we don't have enough suggestions, add generic ones
-  while (suggestions.length < 3) {
-    suggestions.push('Personalized plan based on your profile');
+  try {
+    // Split by newlines and filter out empty lines
+    const lines = content.split('\n')
+      .filter(line => line.trim().length > 0)
+      // Remove any numbering or bullet points at the beginning
+      .map(line => line.replace(/^(\d+\.|\*|\-)\s*/, '').trim())
+      // Ensure each suggestion is not longer than 20 characters
+      .map(line => line.length > 20 ? line.substring(0, 20) : line);
+    
+    // Ensure we have exactly three suggestions
+    const suggestions = lines.slice(0, 3);
+    
+    // If we don't have enough suggestions, add generic ones
+    while (suggestions.length < 3) {
+      const defaultSuggestions = [
+        '需要恢复吗？做轻度训练',
+        '想增强体能吗？核心训练',
+        '关节不适吗？试试拉伸'
+      ];
+      suggestions.push(defaultSuggestions[suggestions.length % defaultSuggestions.length]);
+    }
+    
+    return suggestions;
+  } catch (error) {
+    console.error('Error parsing suggestions:', error);
+    return [
+      '需要恢复吗？做轻度训练',
+      '想增强体能吗？核心训练',
+      '关节不适吗？试试拉伸'
+    ];
   }
-  
-  return suggestions;
 } 

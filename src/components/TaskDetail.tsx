@@ -610,9 +610,9 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 onClick={handleToggleImportant}
                 title={editedTask.important ? "取消重要标记" : "标记为重要"}
               >
-                <Star 
+                <Flag 
                   size={20} 
-                  className={editedTask.important ? "fill-red-500" : ""} 
+                  className={editedTask.important ? "" : ""} 
                 />
               </button>
             </div>

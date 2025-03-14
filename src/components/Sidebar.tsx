@@ -17,7 +17,8 @@ import {
   Zap,
   X,
   Briefcase,
-  User
+  User,
+  Flag
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import UserProfileModal from './UserProfileModal';
@@ -100,7 +101,7 @@ export default function Sidebar() {
     { 
       id: 'important', 
       name: 'Important', 
-      icon: <Star size={18} className="text-red-500" /> 
+      icon: <Flag size={18} className="text-red-500" /> 
     },
     { id: 'all', name: 'Tasks', icon: <HouseWithCheck /> },
   ];

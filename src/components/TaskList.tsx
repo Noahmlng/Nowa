@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag } from 'lucide-react';
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
@@ -147,16 +147,31 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
-      // Create the new task
-      addTask({
+      // Create the new task with default values
+      const newTask: Omit<Task, 'id'> = {
         title: newTaskTitle,
-        status: 'pending',
-        priority: 'medium',
+        status: 'pending' as const,
+        priority: 'medium' as const,
         important: false,
-        taskListId: filter === 'today' || filter === 'all' || filter === 'important' || filter === 'completed' 
-          ? 'inbox' // Default list for filtered views
-          : filter, // Use the current list ID for list views
-      });
+        taskListId: 'inbox',
+      };
+      
+      // Set appropriate attributes based on the current filter
+      if (filter === 'today') {
+        // For My Day view, set due date to today
+        const today = new Date().toISOString().split('T')[0];
+        newTask.dueDate = today;
+        newTask.taskListId = 'today';
+      } else if (filter === 'important') {
+        // For Important view, set important to true
+        newTask.important = true;
+      } else if (filter !== 'all' && filter !== 'completed') {
+        // For custom lists, set the taskListId to the current filter
+        newTask.taskListId = filter;
+      }
+      
+      // Add the task
+      addTask(newTask);
       
       // Clear the input field
       setNewTaskTitle('');
@@ -364,14 +379,14 @@ export default function TaskList({ filter }: TaskListProps) {
                           
                           {/* Important flag */}
                           <button
-                            className="text-gray-400 hover:text-yellow-500"
+                            className="text-gray-400 hover:text-red-500"
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleTaskImportant(task.id);
                             }}
                           >
-                            <Star
-                              className={`h-4 w-4 ${task.important ? 'text-yellow-500 fill-yellow-500' : ''}`}
+                            <Flag
+                              className={`h-4 w-4 ${task.important ? 'text-red-500' : ''}`}
                             />
                           </button>
                           
