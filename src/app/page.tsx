@@ -1,10 +1,13 @@
 'use client'; // This directive enables client-side rendering for this component
 
 import { format } from 'date-fns';
+import { useState } from 'react';
 import { useAppStore } from '@/store/store';
 import TaskList from '@/components/TaskList';
 import GoalList from '@/components/GoalList';
 import Sidebar from '@/components/Sidebar';
+import DailySummary from '@/components/DailySummary';
+import { BarChart2, Calendar } from 'lucide-react';
 
 /**
  * Home Component - Main application page
@@ -16,6 +19,8 @@ import Sidebar from '@/components/Sidebar';
  */
 export default function Home() {
   const { selectedList, taskLists } = useAppStore();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryType, setSummaryType] = useState<'yesterday' | 'today'>('yesterday');
   
   // Calculate today's date in the required format - example: "Friday 14 March"
   const todayFormatted = format(new Date(), 'EEEE d MMMM');
@@ -60,6 +65,12 @@ export default function Home() {
   };
 
   const theme = getThemeColor();
+  
+  // Open summary modal with the specified type
+  const openSummary = (type: 'yesterday' | 'today') => {
+    setSummaryType(type);
+    setSummaryOpen(true);
+  };
 
   return (
     <main className="flex h-screen">
@@ -72,13 +83,35 @@ export default function Home() {
       <div className={`flex-1 flex flex-col ${theme.bg}`}>
         {/* Page header */}
         <header className="px-6 pt-4 pb-3">
-          <h1 className="text-xl font-medium">
-            {selectedList === 'goals' ? 'Goals' : 
-             selectedList === 'today' ? 'My Day' : 
-             selectedList === 'important' ? 'Important' : 
-             selectedList === 'all' ? 'Tasks' : 
-             currentList}
-          </h1>
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-medium">
+              {selectedList === 'goals' ? 'Goals' : 
+               selectedList === 'today' ? 'My Day' : 
+               selectedList === 'important' ? 'Important' : 
+               selectedList === 'all' ? 'Tasks' : 
+               currentList}
+            </h1>
+            
+            {/* Summary buttons - only show for My Day */}
+            {selectedList === 'today' && (
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => openSummary('yesterday')}
+                  className="flex items-center px-3 py-1.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                >
+                  <Calendar size={14} className="mr-1" />
+                  昨日总结
+                </button>
+                <button 
+                  onClick={() => openSummary('today')}
+                  className="flex items-center px-3 py-1.5 text-xs font-medium rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                >
+                  <BarChart2 size={14} className="mr-1" />
+                  评估今天
+                </button>
+              </div>
+            )}
+          </div>
           {selectedList === 'today' && (
             <p className={`text-sm mt-1 ${theme.text}`}>{todayFormatted}</p>
           )}
@@ -93,6 +126,13 @@ export default function Home() {
           )}
         </div>
       </div>
+      
+      {/* Daily Summary Modal */}
+      <DailySummary 
+        isOpen={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        summaryType={summaryType}
+      />
     </main>
   );
 } 

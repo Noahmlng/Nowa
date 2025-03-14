@@ -122,17 +122,25 @@ export default function Sidebar() {
       return null; // 对于其他列表，不显示数量
     }
     
-    let filteredTasks = tasks.filter(task => task.status !== 'completed');
+    // 筛选未完成的任务（状态为 pending）
+    let pendingTasks = tasks.filter(task => task.status === 'pending');
     
     if (listId === 'today') {
-      // For "My Day", only count tasks that are due today
-      const today = new Date().toISOString().split('T')[0];
-      return filteredTasks.filter(task => 
-        task.dueDate && task.dueDate.startsWith(today)
-      ).length;
+      // 对于 "My Day"，只统计截止日期是今天的未完成任务
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0]; // 格式: YYYY-MM-DD
+      
+      return pendingTasks.filter(task => {
+        // 如果任务没有截止日期，则不计入
+        if (!task.dueDate) return false;
+        
+        // 提取任务日期的年月日部分进行比较
+        const taskDateStr = task.dueDate.split('T')[0];
+        return taskDateStr === todayStr;
+      }).length;
     } else if (listId === 'important') {
-      // For "Important", count important tasks
-      return filteredTasks.filter(task => task.important).length;
+      // 对于 "Important"，统计标记为重要的未完成任务
+      return pendingTasks.filter(task => task.important).length;
     }
     
     return null; // 默认不显示
