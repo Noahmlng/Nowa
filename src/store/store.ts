@@ -72,6 +72,7 @@ interface Goal {
   progress: number;                                // Progress as a percentage (0-100)
   status: 'active' | 'completed' | 'cancelled';    // Goal status
   taskIds: string[];                               // Array of associated task IDs
+  order?: number;                                  // Optional order for sorting goals
 }
 
 /**
@@ -112,6 +113,7 @@ interface AppState {
   addGoal: (goal: Omit<Goal, 'id'>) => void;       // Add a new goal (ID is generated automatically)
   updateGoal: (id: string, goal: Partial<Goal>) => void; // Update an existing goal
   deleteGoal: (id: string) => void;                // Delete a goal
+  reorderGoals: (goalIds: string[]) => void;       // Reorder goals based on array of IDs
   
   // KeyResult actions
   addKeyResult: (keyResult: Omit<KeyResult, 'id'>) => void; // Add a new key result
@@ -238,9 +240,13 @@ export const useAppStore = create<AppState>()(
       
       // Goal actions implementation
       addGoal: (goal) => 
-        set((state) => ({ 
-          goals: [...state.goals, { ...goal, id: `goal-${Date.now()}` }] 
-        })),
+        set((state) => {
+          // 计算新目标的顺序，默认为当前最大顺序 + 1
+          const maxOrder = state.goals.reduce((max, g) => Math.max(max, g.order || 0), 0);
+          return { 
+            goals: [...state.goals, { ...goal, id: `goal-${Date.now()}`, order: maxOrder + 1 }] 
+          };
+        }),
       
       updateGoal: (id, updatedGoal) => 
         set((state) => ({ 
@@ -257,6 +263,29 @@ export const useAppStore = create<AppState>()(
             goals: state.goals.filter(goal => goal.id !== id),
             keyResults: keyResultsToKeep
           };
+        }),
+      
+      // 重新排序目标
+      reorderGoals: (goalIds) => 
+        set((state) => {
+          // 创建一个新的目标数组，按照传入的 goalIds 顺序排列
+          const reorderedGoals = [...state.goals];
+          
+          // 为每个目标分配新的顺序值
+          goalIds.forEach((goalId, index) => {
+            const goalIndex = reorderedGoals.findIndex(g => g.id === goalId);
+            if (goalIndex !== -1) {
+              reorderedGoals[goalIndex] = {
+                ...reorderedGoals[goalIndex],
+                order: index + 1
+              };
+            }
+          });
+          
+          // 按照 order 字段排序
+          reorderedGoals.sort((a, b) => (a.order || 0) - (b.order || 0));
+          
+          return { goals: reorderedGoals };
         }),
       
       // KeyResult actions implementation

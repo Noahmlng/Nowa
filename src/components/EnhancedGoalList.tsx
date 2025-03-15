@@ -5,6 +5,7 @@ import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star,
 import { useAppStore } from '@/store/store';
 import { GoalAnalysis, QuestionWithOptions, QuestionOption, TaskSuggestion } from '../types/goal';
 import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 
 /**
  * Goal interface - Represents a goal in the application
@@ -21,6 +22,7 @@ interface Goal {
   tasks?: GoalTask[];
   aiGenerated?: boolean;
   lastUpdated?: string;
+  order?: number;
 }
 
 /**
@@ -65,7 +67,8 @@ export default function EnhancedGoalList() {
     addKeyResult,
     toggleKeyResultComplete,
     deleteKeyResult,
-    updateKeyResult
+    updateKeyResult,
+    reorderGoals
   } = useAppStore();
   
   // Local state for the basic functions
@@ -839,6 +842,47 @@ ${continuedFeedback}
     }
   };
 
+  // 处理拖拽结束事件
+  const handleDragEnd = (result: DropResult) => {
+    // 如果没有目的地或者拖拽到相同位置，不做任何操作
+    if (!result.destination || result.destination.index === result.source.index) {
+      return;
+    }
+
+    // 获取当前目标列表
+    const currentGoals = [...goals];
+    
+    // 按照当前顺序排序
+    currentGoals.sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    // 获取被拖拽的目标
+    const [movedGoal] = currentGoals.splice(result.source.index, 1);
+    
+    // 将目标插入到新位置
+    currentGoals.splice(result.destination.index, 0, movedGoal);
+    
+    // 获取重新排序后的目标 ID 数组
+    const reorderedGoalIds = currentGoals.map(goal => goal.id);
+    
+    // 更新目标顺序
+    reorderGoals(reorderedGoalIds);
+  };
+
+  // 获取目标的颜色
+  const getGoalColor = (index: number) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-green-500',
+      'bg-purple-500',
+      'bg-pink-500',
+      'bg-yellow-500',
+      'bg-red-500',
+      'bg-indigo-500',
+      'bg-teal-500',
+    ];
+    return colors[index % colors.length];
+  };
+
   return (
     <div className="space-y-6">
       {/* Goals List Section */}
@@ -871,169 +915,192 @@ ${continuedFeedback}
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              {goals.map((goal) => {
-                const goalKeyResults = getGoalKeyResults(goal.id);
-                return (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="goals-list">
+                {(provided) => (
                   <div 
-                    key={goal.id}
-                    className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer group"
+                    className="space-y-3"
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
                   >
-                    {/* Goal card content */}
-                    <div className="relative p-3.5">
-                      {/* Goal title and action buttons */}
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 group">
-                          <div className="flex items-start">
-                            <div>
-                              <h3 className="text-base font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text group-hover:bg-gray-100">
-                                {goal.title}
-                              </h3>
-                              {goal.dueDate && (
-                                <div className="flex items-center mt-1 text-xs text-gray-500">
-                                  <Calendar size={12} className="mr-1" />
-                                  <span>{new Date(goal.dueDate).toLocaleDateString()}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex space-x-1 shrink-0">
-                          <div className="text-xs font-medium text-purple-700 mr-2 flex items-center">
-                            {goalKeyResults.filter(kr => kr.status === 'completed').length}/{goalKeyResults.length} 完成
-                          </div>
-                          <button
-                            className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent opening goal detail
-                              deleteGoal(goal.id);
-                            }}
-                            title="删除目标"
-                          >
-                            <Trash2 size={16} className="text-gray-400 hover:text-red-500" />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Key Results section */}
-                      <div className="mt-3">
-                        {/* Key Results list */}
-                        {goalKeyResults.length > 0 && (
-                          <ul className="space-y-1.5 mt-1.5">
-                            {goalKeyResults.map(kr => (
-                              <li 
-                                key={kr.id} 
-                                className="flex items-center group"
-                                onClick={(e) => e.stopPropagation()} // Prevent opening goal detail
+                    {goals
+                      .sort((a, b) => (a.order || 0) - (b.order || 0))
+                      .map((goal, index) => {
+                        const goalKeyResults = getGoalKeyResults(goal.id);
+                        return (
+                          <Draggable key={goal.id} draggableId={goal.id} index={index}>
+                            {(provided) => (
+                              <div 
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer group"
                               >
-                                <button
-                                  className="mr-2 flex-shrink-0"
-                                  onClick={() => toggleKeyResultComplete(kr.id)}
-                                  title={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
-                                >
-                                  {kr.status === 'completed' ? (
-                                    <CheckCircle2 size={16} className="text-green-500" />
-                                  ) : (
-                                    <Circle size={16} className="text-gray-400" />
-                                  )}
-                                </button>
-                                
-                                {editingKeyResultId === kr.id ? (
-                                  <div className="flex-1">
-                                    <input
-                                      type="text"
-                                      className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm"
-                                      value={editingKeyResultTitle}
-                                      onChange={(e) => setEditingKeyResultTitle(e.target.value)}
-                                      onBlur={handleSaveKeyResultTitle}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault(); // 阻止默认行为，防止表单提交
-                                          handleSaveKeyResultTitle();
-                                        }
-                                      }}
-                                    />
+                                {/* Goal card content */}
+                                <div className="relative p-3.5">
+                                  {/* Goal title and action buttons */}
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1 group">
+                                      <div className="flex items-start">
+                                        {/* 目标序号 */}
+                                        <div className={`flex-shrink-0 w-6 h-6 ${getGoalColor(index)} rounded-md flex items-center justify-center text-white font-medium text-sm mr-2`}>
+                                          {index + 1}
+                                        </div>
+                                        <div>
+                                          <h3 className="text-base font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text group-hover:bg-gray-100">
+                                            {goal.title}
+                                          </h3>
+                                          {goal.dueDate && (
+                                            <div className="flex items-center mt-1 text-xs text-gray-500">
+                                              <Calendar size={12} className="mr-1" />
+                                              <span>{new Date(goal.dueDate).toLocaleDateString()}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex space-x-1 shrink-0">
+                                      <div className="text-xs font-medium text-purple-700 mr-2 flex items-center">
+                                        {goalKeyResults.filter(kr => kr.status === 'completed').length}/{goalKeyResults.length} 完成
+                                      </div>
+                                      <button
+                                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation(); // Prevent opening goal detail
+                                          deleteGoal(goal.id);
+                                        }}
+                                        title="删除目标"
+                                      >
+                                        <Trash2 size={16} className="text-gray-400 hover:text-red-500" />
+                                      </button>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <span 
-                                    className={`flex-1 text-sm ${kr.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-700'} hover:bg-gray-100 py-1 px-2 rounded cursor-text`}
-                                    onClick={(e) => handleStartEditingKeyResult(kr, e)}
-                                  >
-                                    {kr.title}
-                                  </span>
-                                )}
-                                
-                                <button
-                                  className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteKeyResult(kr.id);
-                                  }}
-                                  title="删除子目标"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        
-                        {/* New add key result control that looks like an inactive key result */}
-                        <div 
-                          className={`h-0 opacity-0 group-hover:opacity-100 group-hover:h-auto group-hover:mt-1.5 transition-all duration-200 overflow-hidden`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {newKeyResultTitle[goal.id] ? (
-                            <div className="flex items-center">
-                              <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
-                              <input
-                                type="text"
-                                className="flex-1 border-b border-gray-300 focus:outline-none focus:border-purple-500 py-1 px-0 text-sm bg-transparent"
-                                placeholder="输入新的子目标..."
-                                value={newKeyResultTitle[goal.id] || ''}
-                                onChange={(e) => setNewKeyResultTitle({
-                                  ...newKeyResultTitle,
-                                  [goal.id]: e.target.value
-                                })}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault(); // 阻止默认行为，防止表单提交
-                                    handleAddKeyResult(goal.id);
-                                  }
-                                }}
-                                onBlur={() => {
-                                  if (!newKeyResultTitle[goal.id]?.trim()) {
-                                    setNewKeyResultTitle({
-                                      ...newKeyResultTitle,
-                                      [goal.id]: ''
-                                    });
-                                  }
-                                }}
-                                autoFocus
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="flex items-center cursor-pointer"
-                              onClick={() => setNewKeyResultTitle({
-                                ...newKeyResultTitle,
-                                [goal.id]: ' ' // Set to space to trigger input mode
-                              })}
-                            >
-                              <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
-                              <span className="flex-1 text-sm text-gray-400 py-1 px-2 hover:bg-gray-100 rounded">
-                                新的子目标
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                                  
+                                  {/* Key Results section */}
+                                  <div className="mt-3">
+                                    {/* Key Results list */}
+                                    {goalKeyResults.length > 0 && (
+                                      <ul className="space-y-1.5 mt-1.5">
+                                        {goalKeyResults.map(kr => (
+                                          <li 
+                                            key={kr.id} 
+                                            className="flex items-center group"
+                                            onClick={(e) => e.stopPropagation()} // Prevent opening goal detail
+                                          >
+                                            <button
+                                              className="mr-2 flex-shrink-0"
+                                              onClick={() => toggleKeyResultComplete(kr.id)}
+                                              title={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
+                                            >
+                                              {kr.status === 'completed' ? (
+                                                <CheckCircle2 size={16} className="text-green-500" />
+                                              ) : (
+                                                <Circle size={16} className="text-gray-400" />
+                                              )}
+                                            </button>
+                                            
+                                            {editingKeyResultId === kr.id ? (
+                                              <div className="flex-1">
+                                                <input
+                                                  type="text"
+                                                  className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm"
+                                                  value={editingKeyResultTitle}
+                                                  onChange={(e) => setEditingKeyResultTitle(e.target.value)}
+                                                  onBlur={handleSaveKeyResultTitle}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                      e.preventDefault(); // 阻止默认行为，防止表单提交
+                                                      handleSaveKeyResultTitle();
+                                                    }
+                                                  }}
+                                                />
+                                              </div>
+                                            ) : (
+                                              <span 
+                                                className={`flex-1 text-sm ${kr.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-700'} hover:bg-gray-100 py-1 px-2 rounded cursor-text`}
+                                                onClick={(e) => handleStartEditingKeyResult(kr, e)}
+                                              >
+                                                {kr.title}
+                                              </span>
+                                            )}
+                                            
+                                            <button
+                                              className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteKeyResult(kr.id);
+                                              }}
+                                              title="删除子目标"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    
+                                    {/* New add key result control that looks like an inactive key result */}
+                                    <div 
+                                      className={`h-0 opacity-0 group-hover:opacity-100 group-hover:h-auto group-hover:mt-1.5 transition-all duration-200 overflow-hidden`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {newKeyResultTitle[goal.id] ? (
+                                        <div className="flex items-center">
+                                          <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                                          <input
+                                            type="text"
+                                            className="flex-1 border-b border-gray-300 focus:outline-none focus:border-purple-500 py-1 px-0 text-sm bg-transparent"
+                                            placeholder="输入新的子目标..."
+                                            value={newKeyResultTitle[goal.id] || ''}
+                                            onChange={(e) => setNewKeyResultTitle({
+                                              ...newKeyResultTitle,
+                                              [goal.id]: e.target.value
+                                            })}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault(); // 阻止默认行为，防止表单提交
+                                                handleAddKeyResult(goal.id);
+                                              }
+                                            }}
+                                            onBlur={() => {
+                                              if (!newKeyResultTitle[goal.id]?.trim()) {
+                                                setNewKeyResultTitle({
+                                                  ...newKeyResultTitle,
+                                                  [goal.id]: ''
+                                                });
+                                              }
+                                            }}
+                                            autoFocus
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div 
+                                          className="flex items-center cursor-pointer"
+                                          onClick={() => setNewKeyResultTitle({
+                                            ...newKeyResultTitle,
+                                            [goal.id]: ' ' // Set to space to trigger input mode
+                                          })}
+                                        >
+                                          <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                                          <span className="flex-1 text-sm text-gray-400 py-1 px-2 hover:bg-gray-100 rounded">
+                                            新的子目标
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                    {provided.placeholder}
                   </div>
-                );
-              })}
-            </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           )}
         </div>
       )}
