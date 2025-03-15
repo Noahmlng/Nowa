@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { format, parseISO, addDays } from 'date-fns';
+import { format, parseISO, addDays, isToday, isTomorrow, isPast } from 'date-fns';
 import { 
   X, Calendar, Flag, MessageSquare, CheckCircle, Circle, 
   Star, Sun, ChevronDown, Plus, Trash2, Mic, Send, ListChecks,
-  Clock, Check, ChevronRight, Target
+  Clock, Check, ChevronRight, Target, Edit2
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 
@@ -83,8 +83,12 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const [focusOnNextSubtask, setFocusOnNextSubtask] = useState(false); // Flag to focus on subtask input
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null); // For task completion animation
   const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null); // For subtask completion animation
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null); // Track subtask being edited
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState(''); // Track edited subtask title
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
   const titleInputRef = useRef<HTMLInputElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
+  const editSubtaskInputRef = useRef<HTMLInputElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
 
   // Update local state when task changes
@@ -526,6 +530,61 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
     return goal ? goal.title : null;
   };
 
+  /**
+   * Format due date for display
+   */
+  const formatDueDate = (dateString?: string) => {
+    if (!dateString) return null;
+    
+    const date = parseISO(dateString);
+    
+    if (isToday(date)) {
+      return { text: '今天', color: 'text-blue-500' };
+    } else if (isTomorrow(date)) {
+      return { text: '明天', color: 'text-blue-500' };
+    } else if (isPast(date)) {
+      return { text: format(date, 'd MMMM, yyyy'), color: 'text-red-500' };
+    } else {
+      return { text: format(date, 'd MMMM, yyyy'), color: 'text-gray-700' };
+    }
+  };
+
+  /**
+   * Start editing a subtask title
+   */
+  const handleStartEditingSubtask = (subtask: Subtask, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent other actions
+    setEditingSubtaskId(subtask.id);
+    setEditingSubtaskTitle(subtask.title);
+    
+    // Focus the input after component renders
+    setTimeout(() => {
+      if (editSubtaskInputRef.current) {
+        editSubtaskInputRef.current.focus();
+      }
+    }, 0);
+  };
+
+  /**
+   * Save edited subtask title
+   */
+  const handleSaveSubtaskTitle = () => {
+    if (editingSubtaskId && editingSubtaskTitle.trim()) {
+      const updatedSubtasks = editedTask.subtasks?.map(s => 
+        s.id === editingSubtaskId ? { ...s, title: editingSubtaskTitle } : s
+      );
+      
+      const updatedTask = {
+        ...editedTask,
+        subtasks: updatedSubtasks
+      };
+      
+      setEditedTask(updatedTask);
+      onUpdate(updatedTask);
+      setEditingSubtaskId(null);
+    }
+  };
+
   return (
     <div className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-md bg-white shadow-xl transform transition-transform duration-300 ease-in-out border-l border-gray-200"
       style={{ transform: isOpen ? 'translateX(0)' : 'translateX(100%)' }}
@@ -590,18 +649,11 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 ) : (
                   <div>
                     <h1 
-                      className={`text-xl font-medium ${editedTask.status === 'completed' ? 'text-gray-500' : 'text-gray-900'} hover:bg-gray-100 py-1 px-2 rounded cursor-text`}
+                      className="text-xl font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text"
                       onClick={() => setIsEditingTitle(true)}
                     >
                       {editedTask.title}
                     </h1>
-                    {/* 显示关联的目标名称 */}
-                    {getAssociatedGoalName() && (
-                      <div className="flex items-center text-sm text-gray-500 mt-1 ml-2">
-                        <Target size={14} className="mr-1" />
-                        <span>{getAssociatedGoalName()}</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -639,11 +691,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 >
                   <div className="flex items-center">
                     <Calendar size={18} className="text-blue-500 mr-3" />
-                    <span>
-                      {editedTask.dueDate 
-                        ? `截止日期: ${format(parseISO(editedTask.dueDate), 'yyyy年MM月dd日')}`
-                        : '添加截止日期'}
-                    </span>
+                    {editedTask.dueDate ? (
+                      <span className={formatDueDate(editedTask.dueDate)?.color || 'text-gray-700'}>
+                        {formatDueDate(editedTask.dueDate)?.text}
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">添加截止日期</span>
+                    )}
                   </div>
                   <ChevronDown size={16} className="text-gray-400" />
                 </button>
@@ -728,7 +782,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 </div>
               )}
               
-              {/* Goal selector - 新增 */}
+              {/* Goal selector - 修改 */}
               <div className="relative">
                 <button
                   className="flex items-center justify-between w-full p-2.5 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
@@ -736,11 +790,11 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 >
                   <div className="flex items-center">
                     <Target size={18} className="text-purple-500 mr-3" />
-                    <span>
-                      {getAssociatedGoalName() 
-                        ? `关联目标: ${getAssociatedGoalName()}`
-                        : '关联到目标'}
-                    </span>
+                    {getAssociatedGoalName() ? (
+                      <span className="text-gray-700">{getAssociatedGoalName()}</span>
+                    ) : (
+                      <span className="text-gray-400">关联到目标</span>
+                    )}
                   </div>
                   <ChevronDown size={16} className="text-gray-400" />
                 </button>
@@ -789,9 +843,9 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
               {/* Subtasks list */}
               <ul className="space-y-2 mb-3">
                 {editedTask.subtasks?.map(subtask => (
-                  <li key={subtask.id} className="flex items-center group relative">
+                  <li key={subtask.id} className="flex items-start group relative">
                     <button
-                      className="flex-shrink-0 mr-2"
+                      className="flex-shrink-0 mr-2 mt-0.5"
                       onClick={() => handleToggleSubtask(subtask.id)}
                     >
                       {subtask.completed ? (
@@ -804,16 +858,41 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     {/* 完成动画效果 - 划线 */}
                     {(subtask.completed || completingSubtaskId === subtask.id) && (
                       <div 
-                        className="absolute h-[1px] bg-gray-400 left-7 right-8 top-1/2 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
+                        className="absolute h-[1px] bg-gray-400 left-7 right-8 top-3 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
                         style={{ 
                           opacity: completingSubtaskId === subtask.id ? 1 : (subtask.completed ? 1 : 0)
                         }}
                       />
                     )}
                     
-                    <span className={`flex-1 text-sm ${subtask.completed ? 'text-gray-500' : 'text-gray-700'}`}>
-                      {subtask.title}
-                    </span>
+                    {editingSubtaskId === subtask.id ? (
+                      <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          ref={editSubtaskInputRef}
+                          type="text"
+                          className="w-full border-b border-blue-500 focus:outline-none py-1 px-0 text-sm"
+                          value={editingSubtaskTitle}
+                          onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                          onBlur={handleSaveSubtaskTitle}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveSubtaskTitle();
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div 
+                        className="flex-1 group cursor-text overflow-hidden"
+                        onClick={(e) => handleStartEditingSubtask(subtask, e)}
+                      >
+                        <div className={`text-sm ${subtask.completed ? 'text-gray-500' : 'text-gray-700'} truncate group-hover:whitespace-normal`}>
+                          {subtask.title}
+                        </div>
+                      </div>
+                    )}
+                    
                     <button
                       className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-100 transition-opacity"
                       onClick={(e) => {
@@ -878,27 +957,56 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
             
             {/* Description */}
             <div className="mb-6 border-b border-gray-100 pb-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <MessageSquare size={16} className="text-gray-500 mr-2" />
+                任务描述
+              </h3>
               <textarea
                 name="description"
-                rows={3}
-                className="w-full resize-none focus:outline-none text-sm"
-                placeholder="添加备注..."
+                rows={isDescriptionExpanded ? 15 : 6}
+                className="w-full resize-none focus:outline-none text-sm border border-gray-200 rounded-md p-2 transition-all"
+                placeholder="添加描述..."
                 value={editedTask.description || ''}
                 onChange={handleChange}
                 onBlur={() => onUpdate(editedTask)}
+                onFocus={() => setIsDescriptionExpanded(true)}
               />
             </div>
             
             {/* Feedback section - Timeline style */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center">
+              <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
                 <MessageSquare size={16} className="text-gray-500 mr-2" />
                 任务反馈记录
               </h3>
               
+              {/* Add feedback */}
+              <div className="flex items-center bg-gray-50 rounded-lg p-1 mb-4">
+                <input
+                  type="text"
+                  className="flex-1 bg-transparent px-3 py-2 focus:outline-none text-sm"
+                  placeholder="添加任务反馈..."
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault(); // 阻止默认行为，防止表单提交
+                      handleSubmitFeedback();
+                    }
+                  }}
+                />
+                <button
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+                  onClick={handleSubmitFeedback}
+                  disabled={!feedback.trim()}
+                >
+                  <Send size={16} className={`${feedback.trim() ? 'text-blue-500' : 'text-gray-400'}`} />
+                </button>
+              </div>
+              
               {/* Feedback timeline */}
               {editedTask.feedback && editedTask.feedback.length > 0 ? (
-                <div className="relative pl-6 border-l-2 border-gray-200 mb-4">
+                <div className="relative pl-6 border-l-2 border-gray-200">
                   {/* Sort feedback by timestamp - newest first */}
                   {[...(editedTask.feedback || [])]
                     .sort((a, b) => {
@@ -924,34 +1032,10 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                   }
                 </div>
               ) : (
-                <div className="text-sm text-gray-500 italic mb-4">
+                <div className="text-sm text-gray-500 italic">
                   暂无任务反馈
                 </div>
               )}
-              
-              {/* Add feedback */}
-              <div className="flex items-center bg-gray-50 rounded-lg p-1">
-                <input
-                  type="text"
-                  className="flex-1 bg-transparent px-3 py-2 focus:outline-none text-sm"
-                  placeholder="添加任务反馈..."
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault(); // 阻止默认行为，防止表单提交
-                      handleSubmitFeedback();
-                    }
-                  }}
-                />
-                <button
-                  className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-                  onClick={handleSubmitFeedback}
-                  disabled={!feedback.trim()}
-                >
-                  <Send size={16} className={`${feedback.trim() ? 'text-blue-500' : 'text-gray-400'}`} />
-                </button>
-              </div>
             </div>
           </div>
         </div>
