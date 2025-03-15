@@ -86,7 +86,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null); // Track subtask being edited
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState(''); // Track edited subtask title
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const editSubtaskInputRef = useRef<HTMLInputElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
@@ -436,16 +436,6 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   };
 
   /**
-   * Handle title change
-   */
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditedTask(prev => ({
-      ...prev,
-      title: e.target.value
-    }));
-  };
-
-  /**
    * Save task title
    */
   const handleTitleSave = () => {
@@ -631,25 +621,28 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 )}
                 
                 {isEditingTitle ? (
-                  <input
+                  <textarea
                     ref={titleInputRef}
-                    type="text"
-                    className="w-full text-xl font-medium border-b border-blue-500 focus:outline-none py-1 px-0 text-gray-800"
+                    className="w-full text-lg font-medium border border-blue-500 focus:outline-none py-2 px-2 text-gray-800 rounded resize-none"
                     value={editedTask.title}
-                    onChange={handleTitleChange}
+                    onChange={(e) => setEditedTask(prev => ({
+                      ...prev,
+                      title: e.target.value
+                    }))}
                     onBlur={handleTitleSave}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Enter' && e.ctrlKey) {
                         e.preventDefault(); // 阻止默认行为，防止表单提交
                         handleTitleSave();
                       }
                     }}
+                    rows={2}
                     autoFocus
                   />
                 ) : (
                   <div>
                     <h1 
-                      className="text-xl font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text"
+                      className="text-lg font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text break-words"
                       onClick={() => setIsEditingTitle(true)}
                     >
                       {editedTask.title}
