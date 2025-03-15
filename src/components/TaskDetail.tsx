@@ -884,12 +884,12 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                       </div>
                     ) : (
                       <div 
-                        className="flex-1 group cursor-text overflow-hidden"
+                        className="flex-1 cursor-text group"
                         onClick={(e) => handleStartEditingSubtask(subtask, e)}
                       >
-                        <div className={`text-sm ${subtask.completed ? 'text-gray-500' : 'text-gray-700'} truncate group-hover:whitespace-normal`}>
+                        <p className={`text-sm ${subtask.completed ? 'text-gray-500' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal`}>
                           {subtask.title}
-                        </div>
+                        </p>
                       </div>
                     )}
                     
