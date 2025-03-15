@@ -915,7 +915,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                         onClick={(e) => handleStartEditingSubtask(subtask, e)}
                       >
                         <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal transition-all duration-200`}>
-                          {subtask.title}
+                          {subtask.title.length > 26 ? (
+                            <span title={subtask.title}>
+                              {subtask.title.substring(0, 24)}...
+                            </span>
+                          ) : (
+                            subtask.title
+                          )}
                         </p>
                       </div>
                     )}
