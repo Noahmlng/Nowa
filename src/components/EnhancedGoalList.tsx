@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info, Sparkles, Send, RefreshCw, Wand2, BrainCircuit, CheckCheck, MessageSquare } from 'lucide-react';
+import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info, Sparkles, Send, RefreshCw, Wand2, BrainCircuit, CheckCheck, MessageSquare, Circle } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import { GoalAnalysis, QuestionWithOptions, QuestionOption, TaskSuggestion } from '../types/goal';
 import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
@@ -21,6 +21,16 @@ interface Goal {
   tasks?: GoalTask[];
   aiGenerated?: boolean;
   lastUpdated?: string;
+}
+
+/**
+ * KeyResult interface - Represents a key result/milestone for a goal
+ */
+interface KeyResult {
+  id: string;
+  goalId: string;
+  title: string;
+  status: 'pending' | 'completed';
 }
 
 /**
@@ -45,12 +55,26 @@ type CreationStep = 'input' | 'analysis' | 'clarification' | 'taskGeneration' | 
  */
 export default function EnhancedGoalList() {
   // Get goals and goal actions from the global store
-  const { goals, addGoal, updateGoal, deleteGoal, updateGoalProgress } = useAppStore();
+  const { 
+    goals, 
+    keyResults, 
+    addGoal, 
+    updateGoal, 
+    deleteGoal, 
+    updateGoalProgress,
+    addKeyResult,
+    toggleKeyResultComplete,
+    deleteKeyResult,
+    updateKeyResult
+  } = useAppStore();
   
   // Local state for the basic functions
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [newKeyResultTitle, setNewKeyResultTitle] = useState<{[goalId: string]: string}>({});
+  const [editingKeyResultId, setEditingKeyResultId] = useState<string | null>(null);
+  const [editingKeyResultTitle, setEditingKeyResultTitle] = useState('');
   
   // Enhanced flow states
   const [isCreatingGoal, setIsCreatingGoal] = useState(false);
@@ -777,6 +801,44 @@ ${continuedFeedback}
     });
   };
 
+  // Get key results for a specific goal
+  const getGoalKeyResults = (goalId: string) => {
+    return keyResults.filter(kr => kr.goalId === goalId);
+  };
+  
+  // Handle adding a new key result to a goal
+  const handleAddKeyResult = (goalId: string) => {
+    const title = newKeyResultTitle[goalId]?.trim();
+    if (title) {
+      addKeyResult({
+        goalId,
+        title,
+        status: 'pending',
+      });
+      
+      // Clear the input after adding
+      setNewKeyResultTitle({
+        ...newKeyResultTitle,
+        [goalId]: ''
+      });
+    }
+  };
+  
+  // Start editing a key result title
+  const handleStartEditingKeyResult = (keyResult: KeyResult, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening goal detail
+    setEditingKeyResultId(keyResult.id);
+    setEditingKeyResultTitle(keyResult.title);
+  };
+  
+  // Save edited key result title
+  const handleSaveKeyResultTitle = () => {
+    if (editingKeyResultId && editingKeyResultTitle.trim()) {
+      updateKeyResult(editingKeyResultId, { title: editingKeyResultTitle });
+      setEditingKeyResultId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Goals List Section */}
@@ -810,74 +872,218 @@ ${continuedFeedback}
             </div>
           ) : (
             <div className="space-y-3">
-              {goals.map((goal) => (
-                <div 
-                  key={goal.id}
-                  className="p-4 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-800 mb-1">{goal.title}</h3>
-                      {goal.description && (
-                        <p className="text-gray-600 text-sm mb-2">{goal.description}</p>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => setEditingGoal(goal)}
-                        className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-                        title="Edit goal"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => deleteGoal(goal.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                        title="Delete goal"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Progress bar */}
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Progress</span>
-                      <span>{goal.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-500 h-2 rounded-full" 
-                        style={{ width: `${goal.progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  {/* Status and dates */}
-                  <div className="mt-3 flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${
-                        goal.status === 'active' ? 'bg-green-100 text-green-800' :
-                        goal.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
-                      </span>
-                    </div>
-                    {goal.dueDate && (
-                      <div className="flex items-center text-gray-500">
-                        <Calendar size={14} className="mr-1" />
-                        <span>Due {new Date(goal.dueDate).toLocaleDateString()}</span>
+              {goals.map((goal) => {
+                const goalKeyResults = getGoalKeyResults(goal.id);
+                return (
+                  <div 
+                    key={goal.id}
+                    className="rounded-lg bg-white shadow hover:shadow-md transition-shadow overflow-hidden relative cursor-pointer group"
+                  >
+                    {/* Goal card content */}
+                    <div className="relative p-3.5">
+                      {/* Goal title and action buttons */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 group">
+                          <div className="flex items-start">
+                            <div>
+                              <h3 className="text-base font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text group-hover:bg-gray-100">
+                                {goal.title}
+                              </h3>
+                              {goal.dueDate && (
+                                <div className="flex items-center mt-1 text-xs text-gray-500">
+                                  <Calendar size={12} className="mr-1" />
+                                  <span>{new Date(goal.dueDate).toLocaleDateString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex space-x-1 shrink-0">
+                          <div className="text-xs font-medium text-purple-700 mr-2 flex items-center">
+                            {goalKeyResults.filter(kr => kr.status === 'completed').length}/{goalKeyResults.length} 完成
+                          </div>
+                          <button
+                            className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent opening goal detail
+                              deleteGoal(goal.id);
+                            }}
+                            title="删除目标"
+                          >
+                            <Trash2 size={16} className="text-gray-400 hover:text-red-500" />
+                          </button>
+                        </div>
                       </div>
-                    )}
+                      
+                      {/* Key Results section */}
+                      <div className="mt-3">
+                        {/* Key Results list */}
+                        {goalKeyResults.length > 0 && (
+                          <ul className="space-y-1.5 mt-1.5">
+                            {goalKeyResults.map(kr => (
+                              <li 
+                                key={kr.id} 
+                                className="flex items-center group"
+                                onClick={(e) => e.stopPropagation()} // Prevent opening goal detail
+                              >
+                                <button
+                                  className="mr-2 flex-shrink-0"
+                                  onClick={() => toggleKeyResultComplete(kr.id)}
+                                  title={kr.status === 'completed' ? "标记为未完成" : "标记为已完成"}
+                                >
+                                  {kr.status === 'completed' ? (
+                                    <CheckCircle2 size={16} className="text-green-500" />
+                                  ) : (
+                                    <Circle size={16} className="text-gray-400" />
+                                  )}
+                                </button>
+                                
+                                {editingKeyResultId === kr.id ? (
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      className="w-full border-b border-purple-500 focus:outline-none py-1 px-0 text-sm"
+                                      value={editingKeyResultTitle}
+                                      onChange={(e) => setEditingKeyResultTitle(e.target.value)}
+                                      onBlur={handleSaveKeyResultTitle}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault(); // 阻止默认行为，防止表单提交
+                                          handleSaveKeyResultTitle();
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <span 
+                                    className={`flex-1 text-sm ${kr.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-700'} hover:bg-gray-100 py-1 px-2 rounded cursor-text`}
+                                    onClick={(e) => handleStartEditingKeyResult(kr, e)}
+                                  >
+                                    {kr.title}
+                                  </span>
+                                )}
+                                
+                                <button
+                                  className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteKeyResult(kr.id);
+                                  }}
+                                  title="删除子目标"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        
+                        {/* New add key result control that looks like an inactive key result */}
+                        <div 
+                          className={`h-0 opacity-0 group-hover:opacity-100 group-hover:h-auto group-hover:mt-1.5 transition-all duration-200 overflow-hidden`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {newKeyResultTitle[goal.id] ? (
+                            <div className="flex items-center">
+                              <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                              <input
+                                type="text"
+                                className="flex-1 border-b border-gray-300 focus:outline-none focus:border-purple-500 py-1 px-0 text-sm bg-transparent"
+                                placeholder="输入新的子目标..."
+                                value={newKeyResultTitle[goal.id] || ''}
+                                onChange={(e) => setNewKeyResultTitle({
+                                  ...newKeyResultTitle,
+                                  [goal.id]: e.target.value
+                                })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault(); // 阻止默认行为，防止表单提交
+                                    handleAddKeyResult(goal.id);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (!newKeyResultTitle[goal.id]?.trim()) {
+                                    setNewKeyResultTitle({
+                                      ...newKeyResultTitle,
+                                      [goal.id]: ''
+                                    });
+                                  }
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                          ) : (
+                            <div 
+                              className="flex items-center cursor-pointer"
+                              onClick={() => setNewKeyResultTitle({
+                                ...newKeyResultTitle,
+                                [goal.id]: ' ' // Set to space to trigger input mode
+                              })}
+                            >
+                              <Circle size={16} className="text-gray-300 mr-2 flex-shrink-0" />
+                              <span className="flex-1 text-sm text-gray-400 py-1 px-2 hover:bg-gray-100 rounded">
+                                新的子目标
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
+
+      {/* Add new goal input - fixed at the bottom */}
+      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-purple-100 shadow-md p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white shadow-sm text-sm"
+              placeholder="添加新目标..."
+              value={newGoalTitle}
+              onChange={(e) => setNewGoalTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault(); // 阻止默认行为，防止表单提交
+                  if (newGoalTitle.trim()) {
+                    addGoal({
+                      title: newGoalTitle.trim(),
+                      progress: 0,
+                      status: 'active',
+                      taskIds: [],
+                    });
+                    
+                    setNewGoalTitle(''); // Clear the input after adding
+                  }
+                }
+              }}
+            />
+            <button
+              className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg shadow-sm transition-colors"
+              onClick={() => {
+                if (newGoalTitle.trim()) {
+                  addGoal({
+                    title: newGoalTitle.trim(),
+                    progress: 0,
+                    status: 'active',
+                    taskIds: [],
+                  });
+                  
+                  setNewGoalTitle(''); // Clear the input after adding
+                }
+              }}
+            >
+              <Plus size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Goal Creation Modal */}
       {isCreatingGoal && (
