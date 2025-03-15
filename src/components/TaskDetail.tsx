@@ -619,8 +619,8 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
               </button>
               
               <div className="flex-1 relative">
-                {/* 完成动画效果 - 划线 */}
-                {(editedTask.status === 'completed' || completingTaskId === editedTask.id) && (
+                {/* 完成动画效果 - 划线 - 移除 */}
+                {false && (editedTask.status === 'completed' || completingTaskId === editedTask.id) && (
                   <div 
                     className="absolute h-[1px] bg-gray-400 left-0 top-1/2 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
                     style={{ 
