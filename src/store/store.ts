@@ -72,7 +72,7 @@ interface Goal {
   progress: number;                                // Progress as a percentage (0-100)
   status: 'active' | 'completed' | 'cancelled';    // Goal status
   taskIds: string[];                               // Array of associated task IDs
-  order?: number;                                  // Optional order for sorting goals
+  order?: number;                                  // Display order for the goal (lower numbers appear first)
 }
 
 /**
@@ -240,13 +240,9 @@ export const useAppStore = create<AppState>()(
       
       // Goal actions implementation
       addGoal: (goal) => 
-        set((state) => {
-          // 计算新目标的顺序，默认为当前最大顺序 + 1
-          const maxOrder = state.goals.reduce((max, g) => Math.max(max, g.order || 0), 0);
-          return { 
-            goals: [...state.goals, { ...goal, id: `goal-${Date.now()}`, order: maxOrder + 1 }] 
-          };
-        }),
+        set((state) => ({ 
+          goals: [...state.goals, { ...goal, id: `goal-${Date.now()}`, order: state.goals.length }] 
+        })),
       
       updateGoal: (id, updatedGoal) => 
         set((state) => ({ 
@@ -265,28 +261,23 @@ export const useAppStore = create<AppState>()(
           };
         }),
       
-      // 重新排序目标
-      reorderGoals: (goalIds) => 
+      reorderGoals: (goalIds) => {
         set((state) => {
-          // 创建一个新的目标数组，按照传入的 goalIds 顺序排列
-          const reorderedGoals = [...state.goals];
-          
-          // 为每个目标分配新的顺序值
-          goalIds.forEach((goalId, index) => {
-            const goalIndex = reorderedGoals.findIndex(g => g.id === goalId);
-            if (goalIndex !== -1) {
-              reorderedGoals[goalIndex] = {
-                ...reorderedGoals[goalIndex],
-                order: index + 1
-              };
-            }
+          // Create a new array of goals with updated order properties
+          const updatedGoals = state.goals.map(goal => {
+            const newOrder = goalIds.indexOf(goal.id);
+            return {
+              ...goal,
+              order: newOrder !== -1 ? newOrder : goal.order || 999 // If not in the array, keep current order or put at end
+            };
           });
           
-          // 按照 order 字段排序
-          reorderedGoals.sort((a, b) => (a.order || 0) - (b.order || 0));
-          
-          return { goals: reorderedGoals };
-        }),
+          // Sort goals by their order
+          return {
+            goals: updatedGoals.sort((a, b) => (a.order || 0) - (b.order || 0))
+          };
+        });
+      },
       
       // KeyResult actions implementation
       addKeyResult: (keyResult) => {
