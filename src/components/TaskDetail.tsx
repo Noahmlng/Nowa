@@ -86,9 +86,11 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null); // Track subtask being edited
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState(''); // Track edited subtask title
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
+  const [descriptionLineCount, setDescriptionLineCount] = useState(0); // 跟踪描述的行数
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const editSubtaskInputRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
 
   // Update local state when task changes
@@ -100,6 +102,31 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       goalId: task.goalId // 明确设置 goalId，即使它可能是 undefined
     });
   }, [task]);
+
+  // 计算描述文本的行数
+  useEffect(() => {
+    if (descriptionRef.current && editedTask.description) {
+      // 创建一个临时的span来计算文本宽度
+      const span = document.createElement('span');
+      span.style.visibility = 'hidden';
+      span.style.position = 'absolute';
+      span.style.fontSize = window.getComputedStyle(descriptionRef.current).fontSize;
+      span.style.fontFamily = window.getComputedStyle(descriptionRef.current).fontFamily;
+      span.style.width = window.getComputedStyle(descriptionRef.current).width;
+      span.style.whiteSpace = 'pre-wrap';
+      span.textContent = editedTask.description;
+      
+      document.body.appendChild(span);
+      const lineHeight = parseInt(window.getComputedStyle(descriptionRef.current).lineHeight);
+      const height = span.offsetHeight;
+      document.body.removeChild(span);
+      
+      const lines = Math.ceil(height / (lineHeight || 20)); // 使用默认行高20px如果无法获取
+      setDescriptionLineCount(lines);
+    } else {
+      setDescriptionLineCount(0);
+    }
+  }, [editedTask.description]);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -864,7 +891,12 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                           ref={editSubtaskInputRef}
                           className="w-full border-b border-blue-500 focus:outline-none py-1 px-0 text-sm resize-none"
                           value={editingSubtaskTitle}
-                          onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                          onChange={(e) => {
+                            setEditingSubtaskTitle(e.target.value);
+                            // 自动调整高度
+                            e.target.style.height = 'auto';
+                            e.target.style.height = `${e.target.scrollHeight}px`;
+                          }}
                           onBlur={handleSaveSubtaskTitle}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && e.ctrlKey) {
@@ -872,8 +904,8 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                               handleSaveSubtaskTitle();
                             }
                           }}
-                          rows={3}
-                          style={{ minHeight: '60px' }}
+                          rows={1}
+                          style={{ minHeight: '24px' }}
                         />
                         <div className="text-xs text-gray-500 mt-1">按Ctrl+Enter保存</div>
                       </div>
@@ -957,14 +989,19 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 任务描述
               </h3>
               <textarea
+                ref={descriptionRef}
                 name="description"
-                rows={isDescriptionExpanded ? 15 : 6}
+                rows={isDescriptionExpanded && descriptionLineCount > 6 ? 15 : 6}
                 className="w-full resize-none focus:outline-none text-sm border border-gray-200 rounded-md p-2 transition-all"
                 placeholder="添加描述..."
                 value={editedTask.description || ''}
                 onChange={handleChange}
                 onBlur={() => onUpdate(editedTask)}
-                onFocus={() => setIsDescriptionExpanded(true)}
+                onFocus={() => {
+                  if (descriptionLineCount > 6) {
+                    setIsDescriptionExpanded(true);
+                  }
+                }}
               />
             </div>
             
