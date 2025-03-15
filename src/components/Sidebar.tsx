@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { isToday, parseISO } from 'date-fns';
 import { 
   Sun, 
   CheckCircle2, 
@@ -123,21 +124,13 @@ export default function Sidebar() {
     }
     
     // 筛选未完成的任务（状态为 pending）
-    let pendingTasks = tasks.filter(task => task.status === 'pending');
+    const pendingTasks = tasks.filter(task => task.status === 'pending');
     
     if (listId === 'today') {
-      // 对于 "My Day"，只统计截止日期是今天的未完成任务
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0]; // 格式: YYYY-MM-DD
-      
-      return pendingTasks.filter(task => {
-        // 如果任务没有截止日期，则不计入
-        if (!task.dueDate) return false;
-        
-        // 提取任务日期的年月日部分进行比较
-        const taskDateStr = task.dueDate.split('T')[0];
-        return taskDateStr === todayStr;
-      }).length;
+      // 对于 "My Day"，统计截止日期是今天的未完成任务
+      return pendingTasks.filter(task => 
+        task.dueDate && isToday(parseISO(task.dueDate))
+      ).length;
     } else if (listId === 'important') {
       // 对于 "Important"，统计标记为重要的未完成任务
       return pendingTasks.filter(task => task.important).length;

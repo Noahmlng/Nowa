@@ -181,14 +181,15 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
    * Handle toggling important status
    */
   const handleToggleImportant = () => {
+    const newImportantValue = !editedTask.important;
     setEditedTask(prev => ({
       ...prev,
-      important: !prev.important
+      important: newImportantValue
     }));
     // Auto-save when toggling importance
     onUpdate({
       ...editedTask,
-      important: !editedTask.important
+      important: newImportantValue
     });
   };
 

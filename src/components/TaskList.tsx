@@ -85,6 +85,19 @@ export default function TaskList({ filter }: TaskListProps) {
   });
 
   /**
+   * Sort tasks by importance (important tasks first)
+   * This is used for the My Day view
+   */
+  const sortTasksByImportance = (tasks: Task[]) => {
+    return [...tasks].sort((a, b) => {
+      // Sort by importance (important tasks first)
+      if (a.important && !b.important) return -1;
+      if (!a.important && b.important) return 1;
+      return 0;
+    });
+  };
+
+  /**
    * Group tasks by date category
    * - Today: Tasks due today
    * - Overdue: Tasks with past due dates
@@ -92,9 +105,9 @@ export default function TaskList({ filter }: TaskListProps) {
    * - Upcoming: Tasks without a due date
    */
   const groupedTasks = filteredTasks.reduce((groups, task) => {
-    // 在 My Day 视图中，不使用"计划中"分组，所有任务都归入 Today 组
+    // 在 My Day 视图中，按照完成状态分组，未完成的在上面，已完成的在下面
     if (filter === 'today') {
-      const group = 'Today';
+      const group = task.status === 'completed' ? '已完成' : '未完成';
       if (!groups[group]) {
         groups[group] = [];
       }
@@ -130,8 +143,18 @@ export default function TaskList({ filter }: TaskListProps) {
    * 2. Overdue
    * 3. Future dates (sorted chronologically)
    * 4. Upcoming (tasks without due date)
+   * 
+   * For My Day view:
+   * 1. 未完成 (Pending)
+   * 2. 已完成 (Completed)
    */
   const sortedGroups = Object.keys(groupedTasks).sort((a, b) => {
+    if (filter === 'today') {
+      if (a === '未完成') return -1;
+      if (b === '未完成') return 1;
+      return 0;
+    }
+    
     if (a === 'Today') return -1;
     if (b === 'Today') return 1;
     if (a === 'Overdue') return -1;
@@ -285,6 +308,23 @@ export default function TaskList({ filter }: TaskListProps) {
     setAiSuggestTaskId(taskId);
   };
 
+  /**
+   * Toggle a task's important status
+   */
+  const handleToggleImportant = (taskId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent opening the task detail
+    toggleTaskImportant(taskId);
+  };
+
+  // Sort tasks by importance in My Day view
+  if (filter === 'today') {
+    Object.keys(groupedTasks).forEach(group => {
+      if (groupedTasks[group]) {
+        groupedTasks[group] = sortTasksByImportance(groupedTasks[group]);
+      }
+    });
+  }
+
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       {/* Task input */}
@@ -292,14 +332,14 @@ export default function TaskList({ filter }: TaskListProps) {
         <div className="flex items-center">
           <input
             type="text"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500 h-10"
             placeholder="Add a task..."
             value={newTaskTitle}
             onChange={(e) => setNewTaskTitle(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleAddTask()}
           />
           <button
-            className="bg-blue-500 text-white px-3 py-2 rounded-r-md hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-3 py-2 rounded-r-md hover:bg-blue-600 transition-colors h-10 flex items-center justify-center"
             onClick={handleAddTask}
           >
             <Plus size={20} />
@@ -332,7 +372,7 @@ export default function TaskList({ filter }: TaskListProps) {
                   <div className="flex items-start gap-3">
                     {/* Task completion toggle */}
                     <button
-                      className="flex-shrink-0 mt-1"
+                      className="flex-shrink-0 mt-0.5"
                       onClick={() => toggleTaskComplete(task.id)}
                     >
                       {task.status === 'completed' ? (
@@ -346,9 +386,11 @@ export default function TaskList({ filter }: TaskListProps) {
                     <div className="flex-1 min-w-0" onClick={() => handleOpenDetail(task)}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                            {task.title}
-                          </p>
+                          <div className="flex items-center">
+                            <span className={`flex-1 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                              {task.title}
+                            </span>
+                          </div>
                           
                           {/* Display subtasks count if present */}
                           {task.subtasks && task.subtasks.length > 0 && (
@@ -367,32 +409,28 @@ export default function TaskList({ filter }: TaskListProps) {
                           )}
                         </div>
                         
-                        <div className="flex items-center space-x-2 ml-2">
+                        <div className="flex items-center space-x-1">
+                          {/* Important flag button */}
+                          <button 
+                            className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-300'}`}
+                            onClick={(e) => handleToggleImportant(task.id, e)}
+                            title={task.important ? "取消重要标记" : "标记为重要"}
+                          >
+                            <Flag size={16} />
+                          </button>
+                          
                           {/* AI Suggestions button */}
                           <button
-                            className="text-gray-400 hover:text-purple-500"
+                            className="text-gray-400 hover:text-purple-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
                             onClick={(e) => handleShowAiSuggestions(task.id, e)}
                             title="Get AI suggestions"
                           >
                             <Zap className="h-4 w-4" />
                           </button>
                           
-                          {/* Important flag */}
-                          <button
-                            className="text-gray-400 hover:text-red-500"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleTaskImportant(task.id);
-                            }}
-                          >
-                            <Flag
-                              className={`h-4 w-4 ${task.important ? 'text-red-500' : ''}`}
-                            />
-                          </button>
-                          
                           {/* Delete button */}
                           <button
-                            className="text-gray-400 hover:text-red-500"
+                            className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteTask(task.id);
