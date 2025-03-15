@@ -147,6 +147,34 @@ export default function TaskList({ filter }: TaskListProps) {
     // 对每个分组内的任务进行排序
     groupedTasks['未完成'] = sortTasksByImportance(groupedTasks['未完成']);
     groupedTasks['已完成'] = sortTasksByImportance(groupedTasks['已完成']);
+  } else if (filter === 'important') {
+    // Important 视图中，按完成状态分组
+    groupedTasks['未完成'] = [];
+    groupedTasks['已完成'] = [];
+    
+    // 填充任务
+    filteredTasks.forEach(task => {
+      const group = task.status === 'completed' ? '已完成' : '未完成';
+      groupedTasks[group].push(task);
+    });
+    
+    // 对每个分组内的任务按截止日期排序
+    const sortByDueDate = (tasks: Task[]) => {
+      return [...tasks].sort((a, b) => {
+        // 如果两个任务都没有截止日期，保持原有顺序
+        if (!a.dueDate && !b.dueDate) return 0;
+        
+        // 没有截止日期的任务放在最后
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        
+        // 按截止日期升序排序
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+    };
+    
+    groupedTasks['未完成'] = sortByDueDate(groupedTasks['未完成']);
+    groupedTasks['已完成'] = sortByDueDate(groupedTasks['已完成']);
   } else {
     // 其他视图保持原有分组逻辑
     filteredTasks.forEach(task => {
@@ -190,7 +218,7 @@ export default function TaskList({ filter }: TaskListProps) {
    * 2. 已完成 (Completed)
    */
   const sortedGroups = Object.keys(groupedTasks).sort((a, b) => {
-    if (filter === 'today') {
+    if (filter === 'today' || filter === 'important') {
       if (a === '未完成') return -1;
       if (b === '未完成') return 1;
       return 0;
