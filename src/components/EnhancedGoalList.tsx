@@ -1107,14 +1107,19 @@ ${continuedFeedback}
                 if (e.key === 'Enter') {
                   e.preventDefault(); // 阻止默认行为，防止表单提交
                   if (newGoalTitle.trim()) {
-                    addGoal({
-                      title: newGoalTitle.trim(),
-                      progress: 0,
-                      status: 'active',
-                      taskIds: [],
-                    });
-                    
+                    // 设置新目标标题并打开AI创建流程
+                    setNewGoal(prev => ({
+                      ...prev,
+                      title: newGoalTitle.trim()
+                    }));
+                    setIsCreatingGoal(true);
+                    setCreationStep('input');
                     setNewGoalTitle(''); // Clear the input after adding
+                    
+                    // Focus the input after component renders
+                    setTimeout(() => {
+                      if (inputRef.current) inputRef.current.focus();
+                    }, 0);
                   }
                 }
               }}
@@ -1123,14 +1128,19 @@ ${continuedFeedback}
               className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg shadow-sm transition-colors"
               onClick={() => {
                 if (newGoalTitle.trim()) {
-                  addGoal({
-                    title: newGoalTitle.trim(),
-                    progress: 0,
-                    status: 'active',
-                    taskIds: [],
-                  });
-                  
+                  // 设置新目标标题并打开AI创建流程
+                  setNewGoal(prev => ({
+                    ...prev,
+                    title: newGoalTitle.trim()
+                  }));
+                  setIsCreatingGoal(true);
+                  setCreationStep('input');
                   setNewGoalTitle(''); // Clear the input after adding
+                  
+                  // Focus the input after component renders
+                  setTimeout(() => {
+                    if (inputRef.current) inputRef.current.focus();
+                  }, 0);
                 }
               }}
             >
