@@ -464,7 +464,7 @@ export default function TaskList({ filter }: TaskListProps) {
                           ) : (
                             <div className="flex-1">
                               <span 
-                                className={`inline-block py-1 px-2 rounded hover:bg-gray-100 cursor-text ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
+                                className={`inline ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleStartEditingTask(task, e);
