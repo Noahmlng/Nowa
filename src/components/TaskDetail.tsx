@@ -1053,9 +1053,6 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     })
                     .map((feedbackItem, index) => (
                       <div key={index} className="mb-4 relative">
-                        {/* Timeline dot - 移到时间线上 */}
-                        <div className="absolute -left-[9px] top-5 w-4 h-4 bg-blue-100 border-2 border-blue-500 rounded-full"></div>
-                        
                         {/* Feedback timestamp */}
                         <div className="text-xs text-gray-500 mb-1">
                           {feedbackItem.timestamp ? format(new Date(feedbackItem.timestamp), 'yyyy年MM月dd日 HH:mm') : ''}
