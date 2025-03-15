@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag, Edit2 } from 'lucide-react';
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
@@ -59,6 +59,9 @@ export default function TaskList({ filter }: TaskListProps) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null); // Currently selected task
   const [isDetailOpen, setIsDetailOpen] = useState(false); // Whether the task detail modal is open
   const [aiSuggestTaskId, setAiSuggestTaskId] = useState<string | null>(null); // Track task for AI suggestions
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null); // Track task being edited
+  const [editingTaskTitle, setEditingTaskTitle] = useState(''); // Track edited task title
+  const editTaskInputRef = useRef<HTMLInputElement>(null); // Reference to the edit task input
 
   /**
    * Filter tasks based on the selected filter
@@ -85,14 +88,37 @@ export default function TaskList({ filter }: TaskListProps) {
   });
 
   /**
-   * Sort tasks by importance (important tasks first)
+   * Sort tasks by importance (important tasks first) and creation time (newer first)
    * This is used for the My Day view
    */
   const sortTasksByImportance = (tasks: Task[]) => {
     return [...tasks].sort((a, b) => {
-      // Sort by importance (important tasks first)
-      if (a.important && !b.important) return -1;
-      if (!a.important && b.important) return 1;
+      // For completed tasks, sort by importance first, then by completion time (newer first)
+      if (a.status === 'completed' && b.status === 'completed') {
+        // Sort by importance (important tasks first)
+        if (a.important && !b.important) return -1;
+        if (!a.important && b.important) return 1;
+        
+        // Then sort by completion time (newer first)
+        if (a.completedAt && b.completedAt) {
+          return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+        }
+        
+        // If no completedAt, use ID as a proxy for creation time (higher ID = newer)
+        return b.id.localeCompare(a.id);
+      }
+      
+      // For pending tasks, sort by importance only
+      if (a.status === 'pending' && b.status === 'pending') {
+        if (a.important && !b.important) return -1;
+        if (!a.important && b.important) return 1;
+        return 0;
+      }
+      
+      // Always keep pending tasks above completed tasks
+      if (a.status === 'pending' && b.status === 'completed') return -1;
+      if (a.status === 'completed' && b.status === 'pending') return 1;
+      
       return 0;
     });
   };
@@ -316,8 +342,49 @@ export default function TaskList({ filter }: TaskListProps) {
     toggleTaskImportant(taskId);
   };
 
-  // Sort tasks by importance in My Day view
+  /**
+   * Start editing a task title
+   */
+  const handleStartEditingTask = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening task detail
+    setEditingTaskId(task.id);
+    setEditingTaskTitle(task.title);
+    
+    // Focus the input after component renders
+    setTimeout(() => {
+      if (editTaskInputRef.current) {
+        editTaskInputRef.current.focus();
+      }
+    }, 0);
+  };
+
+  /**
+   * Save edited task title
+   */
+  const handleSaveTaskTitle = () => {
+    if (editingTaskId && editingTaskTitle.trim()) {
+      updateTask(editingTaskId, { title: editingTaskTitle });
+      setEditingTaskId(null);
+    }
+  };
+
+  // Sort all tasks by the appropriate criteria
   if (filter === 'today') {
+    // For My Day view, sort all tasks by importance and completion status
+    const pendingTasks = filteredTasks.filter(task => task.status === 'pending');
+    const completedTasks = filteredTasks.filter(task => task.status === 'completed');
+    
+    // Sort pending tasks by importance
+    const sortedPendingTasks = sortTasksByImportance(pendingTasks);
+    
+    // Sort completed tasks by importance and completion time
+    const sortedCompletedTasks = sortTasksByImportance(completedTasks);
+    
+    // Create the grouped tasks object
+    groupedTasks['未完成'] = sortedPendingTasks;
+    groupedTasks['已完成'] = sortedCompletedTasks;
+  } else {
+    // For other views, sort tasks within each group
     Object.keys(groupedTasks).forEach(group => {
       if (groupedTasks[group]) {
         groupedTasks[group] = sortTasksByImportance(groupedTasks[group]);
@@ -386,27 +453,67 @@ export default function TaskList({ filter }: TaskListProps) {
                     <div className="flex-1 min-w-0" onClick={() => handleOpenDetail(task)}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center">
-                            <span className={`flex-1 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
-                              {task.title}
-                            </span>
+                          {editingTaskId === task.id ? (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <input
+                                ref={editTaskInputRef}
+                                type="text"
+                                className="w-full border-b border-blue-500 focus:outline-none py-1 px-0"
+                                value={editingTaskTitle}
+                                onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                onBlur={handleSaveTaskTitle}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveTaskTitle();
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div 
+                              className="group cursor-text"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span 
+                                className={`flex-1 group-hover:bg-gray-100 py-1 px-2 rounded ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
+                                onClick={(e) => handleStartEditingTask(task, e)}
+                              >
+                                {task.title}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Task metadata - reordered as requested */}
+                          <div className="mt-2 space-y-1">
+                            {/* Display associated goal if present - now at the top */}
+                            {task.goalId && (
+                              <div className="flex items-center text-xs text-gray-500">
+                                <Target className="h-3 w-3 mr-1 text-purple-500" />
+                                {getAssociatedGoalName(task.goalId)}
+                              </div>
+                            )}
+                            
+                            {/* Display subtasks count if present - now in the middle */}
+                            {task.subtasks && task.subtasks.length > 0 && (
+                              <div className="flex items-center text-xs text-gray-500">
+                                <ClipboardList className="h-3 w-3 mr-1" />
+                                {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length} subtasks
+                              </div>
+                            )}
+                            
+                            {/* Due date if present - now at the bottom */}
+                            {task.dueDate && (
+                              <div className="flex items-center text-xs text-gray-500">
+                                <Calendar className="h-3 w-3 mr-1" />
+                                <span>
+                                  {isToday(parseISO(task.dueDate))
+                                    ? 'Today'
+                                    : format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                          
-                          {/* Display subtasks count if present */}
-                          {task.subtasks && task.subtasks.length > 0 && (
-                            <div className="mt-1 flex items-center text-xs text-gray-500">
-                              <ClipboardList className="h-3 w-3 mr-1" />
-                              {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length} subtasks
-                            </div>
-                          )}
-                          
-                          {/* Display associated goal if present */}
-                          {task.goalId && (
-                            <div className="mt-1 flex items-center text-xs text-gray-500">
-                              <Target className="h-3 w-3 mr-1" />
-                              {getAssociatedGoalName(task.goalId)}
-                            </div>
-                          )}
                         </div>
                         
                         <div className="flex items-center space-x-1">
@@ -440,18 +547,6 @@ export default function TaskList({ filter }: TaskListProps) {
                           </button>
                         </div>
                       </div>
-                      
-                      {/* Due date if present */}
-                      {task.dueDate && (
-                        <div className="mt-1 flex items-center text-xs text-gray-500">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          <span>
-                            {isToday(parseISO(task.dueDate))
-                              ? 'Today'
-                              : format(parseISO(task.dueDate), 'MMM d, yyyy')}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </li>
