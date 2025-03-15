@@ -73,16 +73,16 @@ export default function Home() {
   };
 
   return (
-    <main className="flex h-screen">
+    <main className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 flex-shrink-0 shadow-lg z-10">
+      <div className="w-64 flex-shrink-0 shadow-lg z-10 h-screen overflow-hidden">
         <Sidebar />
       </div>
       
       {/* Main content */}
-      <div className={`flex-1 flex flex-col ${theme.bg}`}>
+      <div className={`flex-1 flex flex-col ${theme.bg} h-screen overflow-hidden`}>
         {/* Page header */}
-        <header className="px-6 pt-4 pb-3">
+        <header className="px-6 pt-4 pb-3 flex-shrink-0">
           <div className="flex justify-between items-center">
             <h1 className="text-xl font-medium">
               {selectedList === 'goals' ? 'My Goals' : 
@@ -117,12 +117,16 @@ export default function Home() {
           )}
         </header>
         
-        {/* Page content */}
-        <div className="flex-1 px-6 pt-3">
+        {/* Page content - with overflow control */}
+        <div className="flex-1 px-6 pt-3 overflow-hidden">
           {selectedList === 'goals' ? (
-            <EnhancedGoalList />
+            <div className="h-full overflow-y-auto">
+              <EnhancedGoalList />
+            </div>
           ) : (
-            <TaskList filter={selectedList} />
+            <div className="h-full overflow-y-auto">
+              <TaskList filter={selectedList} />
+            </div>
           )}
         </div>
       </div>

@@ -884,10 +884,10 @@ ${continuedFeedback}
   };
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Goals List Section */}
       {!isCreatingGoal && (
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 pb-20">
           {/* Header with Add Goal button */}
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-800">My Goals</h2>
@@ -1106,7 +1106,7 @@ ${continuedFeedback}
       )}
 
       {/* Add new goal input - fixed at the bottom */}
-      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-purple-100 shadow-md p-4">
+      <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-purple-100 shadow-md p-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center space-x-2">
             <input

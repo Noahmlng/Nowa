@@ -155,47 +155,45 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 shadow-sm flex flex-col h-full">
+    <aside className="h-full flex flex-col bg-white">
       {/* User profile section */}
-      <div className="py-6 px-4 border-b border-gray-100 relative">
+      <div className="p-4 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center">
           <h2 className="text-xl font-semibold text-gray-800">{user.nickname}</h2>
-          <div 
-            className="ml-2 px-2.5 py-0.5 bg-gray-100 rounded-md cursor-pointer hover:bg-gray-200 transition-colors"
-            onClick={() => setIsProfileModalOpen(true)}
-          >
-            <div className="flex items-center">
-              <User size={10} className="text-gray-500 mr-1" />
-              <span className="text-xs font-medium text-gray-600">About Me</span>
-            </div>
-          </div>
-        </div>
-        
-        {/* User Profile Modal */}
-        <UserProfileModal 
-          isOpen={isProfileModalOpen} 
-          onClose={() => setIsProfileModalOpen(false)} 
-        />
-        
-        {/* 用户状态区域 */}
-        <div 
-          className="mt-2 flex items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors"
-          onClick={() => setIsStatusModalOpen(true)}
-        >
-          {userStatus ? (
-            <>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1.5">
-                <span className="mr-1.5">{userStatus.icon}</span>
-                <span className="text-sm text-gray-700">{userStatus.label}</span>
-              </div>
-              <span className="text-xs text-gray-400 ml-2">今日有效</span>
-            </>
-          ) : (
-            <div className="text-sm text-gray-500 flex items-center">
-              <Smile size={16} className="mr-1.5 text-gray-400" />
-              <span>设置今日状态...</span>
+          {userStatus && (
+            <div className="ml-2 flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+              {userStatus.icon}
+              <span className="ml-1">{userStatus.label}</span>
             </div>
           )}
+        </div>
+        
+        <div className="flex mt-2">
+          {user.tags.map((tag, index) => (
+            <span 
+              key={index}
+              className="mr-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+        
+        <div className="flex mt-3 space-x-2">
+          <button 
+            className="flex items-center text-xs text-gray-500 hover:text-gray-700"
+            onClick={() => setIsStatusModalOpen(true)}
+          >
+            <Flag size={14} className="mr-1" />
+            {userStatus ? '更改状态' : '设个状态'}
+          </button>
+          <button 
+            className="flex items-center text-xs text-gray-500 hover:text-gray-700"
+            onClick={() => setIsProfileModalOpen(true)}
+          >
+            <User size={14} className="mr-1" />
+            个人资料
+          </button>
         </div>
         
         {/* 状态选择模态框 */}
@@ -286,8 +284,10 @@ export default function Sidebar() {
                       }`}
                       onClick={() => setSelectedList(list.id)}
                     >
-                      <span className="text-gray-500">
-                        <CheckCircle2 size={18} />
+                      <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center">
+                        <span className="text-xs font-medium text-gray-600">
+                          {list.name.charAt(0).toUpperCase()}
+                        </span>
                       </span>
                       <span className="flex-1">{list.name}</span>
                       {count !== null && count > 0 && (
@@ -304,53 +304,74 @@ export default function Sidebar() {
         )}
         
         {/* Add new list section */}
-        <div className="mt-4 px-2">
+        <div className="mt-6 pt-4 border-t border-gray-100">
           {isAddingList ? (
             // Form for adding a new list
-            <div className="p-2 bg-gray-50 border border-gray-200 rounded-md">
+            <div className="px-3">
               <input
                 type="text"
-                className="w-full px-3 py-1.5 mb-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="List name"
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newListName.trim()) {
+                    handleAddList();
+                  } else if (e.key === 'Escape') {
+                    setIsAddingList(false);
+                    setNewListName('');
+                  }
+                }}
                 autoFocus
               />
-              <div className="flex justify-between">
+              <div className="flex justify-end mt-2 space-x-2">
                 <button
-                  className="px-3 py-1 bg-blue-500 text-white text-xs font-medium rounded-md hover:bg-blue-600 transition-colors"
-                  onClick={handleAddList}
-                >
-                  Add
-                </button>
-                <button
-                  className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-300 transition-colors"
-                  onClick={() => setIsAddingList(false)}
+                  className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                  onClick={() => {
+                    setIsAddingList(false);
+                    setNewListName('');
+                  }}
                 >
                   Cancel
+                </button>
+                <button
+                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleAddList}
+                  disabled={!newListName.trim()}
+                >
+                  Add
                 </button>
               </div>
             </div>
           ) : (
             // Button to show the add list form
             <button
-              className="w-full flex items-center space-x-2 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors"
+              className="w-full text-left px-3 py-2 text-gray-600 hover:text-gray-800 flex items-center space-x-2"
               onClick={() => setIsAddingList(true)}
             >
-              <Plus size={16} className="text-gray-500" />
-              <span className="text-sm font-medium">New List</span>
+              <Plus size={18} />
+              <span>New List</span>
             </button>
           )}
         </div>
       </nav>
       
-      {/* Footer with settings button */}
-      <div className="py-3 px-3 border-t border-gray-200">
-        <button className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
+      {/* Bottom actions section */}
+      <div className="p-3 border-t border-gray-100 flex-shrink-0">
+        <button
+          className="w-full text-left px-3 py-2 text-gray-600 hover:text-gray-800 flex items-center space-x-2"
+          onClick={() => {/* Open settings */}}
+        >
           <Settings size={18} className="text-gray-500" />
           <span className="text-sm">Settings</span>
         </button>
       </div>
+      
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </aside>
   );
 }

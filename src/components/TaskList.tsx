@@ -447,7 +447,7 @@ export default function TaskList({ filter }: TaskListProps) {
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       {/* Task input */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center">
           <input
             type="text"
@@ -467,10 +467,10 @@ export default function TaskList({ filter }: TaskListProps) {
       </div>
       
       {/* Task List */}
-      <div className="flex-1 overflow-y-auto pb-16">
+      <div className="flex-1 overflow-y-auto">
         {Object.entries(groupedTasks).map(([group, tasksInGroup]) => (
           <div key={group} className="mb-6">
-            <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+            <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider sticky top-0 bg-white bg-opacity-90 backdrop-blur-sm z-10">
               {group}
             </h3>
             <ul className="divide-y divide-gray-200">
