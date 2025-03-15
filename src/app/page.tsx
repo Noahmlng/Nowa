@@ -85,7 +85,7 @@ export default function Home() {
         <header className="px-6 pt-4 pb-3">
           <div className="flex justify-between items-center">
             <h1 className="text-xl font-medium">
-              {selectedList === 'goals' ? 'Goals' : 
+              {selectedList === 'goals' ? 'My Goals' : 
                selectedList === 'today' ? 'My Day' : 
                selectedList === 'important' ? 'Important' : 
                selectedList === 'all' ? 'Tasks' : 

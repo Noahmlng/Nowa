@@ -305,23 +305,32 @@ export default function EnhancedGoalList() {
 
   // Save the newly created goal
   const saveNewGoal = () => {
-    // 使用as any类型断言处理lastUpdated字段
-    const finalGoal = {
-      title: newGoal.title || 'Untitled Goal',
-      curation: newGoal.curation || '',
+    // Create a new goal with the current data
+    const goalToAdd = {
+      title: newGoal.title || '',
+      description: newGoal.curation || '',
+      progress: 0,
+      status: 'active' as const,
+      taskIds: [],
+      // Add any other required properties
+    };
+    
+    // Add the goal to the store
+    addGoal(goalToAdd);
+    
+    // Reset the creation state
+    setIsCreatingGoal(false);
+    setCreationStep('input');
+    setNewGoal({
+      title: '',
+      curation: '',
       progress: 0,
       status: 'active',
-      startDate: new Date().toISOString(),
-      tasks: newGoal.tasks?.filter(task => task.title.trim() !== '') || [],
-      aiGenerated: needsAiHelp || false,
-      lastUpdated: new Date().toISOString() // 添加当前时间作为创建/更新时间
-    } as Omit<Goal, 'id'>;
-    
-    addGoal(finalGoal);
-    console.log("Saving new goal:", finalGoal);
-    
-    // Reset creation flow
-    toggleGoalCreation();
+      tasks: [],
+      lastUpdated: new Date().toISOString()
+    });
+    setAiAnalysisResult(null);
+    setNeedsAiHelp(null);
   };
 
   // 处理AI任务细化请求（仅在编辑模式下使用）
@@ -769,21 +778,108 @@ ${continuedFeedback}
   };
 
   return (
-    <div className="space-y-8">
-      {/* Top action bar */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold text-gray-800">My Goals</h2>
-        {!isCreatingGoal && (
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
-            onClick={toggleGoalCreation}
-          >
-            <Plus size={18} /> New Goal
-          </button>
-        )}
-      </div>
+    <div className="space-y-6">
+      {/* Goals List Section */}
+      {!isCreatingGoal && (
+        <div className="space-y-4">
+          {/* Header with Add Goal button */}
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-800">My Goals</h2>
+            <button
+              onClick={() => setIsCreatingGoal(true)}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md flex items-center gap-1 transition-colors"
+            >
+              <Plus size={16} />
+              Add Goal
+            </button>
+          </div>
+          
+          {/* Goals List */}
+          {goals.length === 0 ? (
+            <div className="text-center py-10 bg-white rounded-lg border border-gray-200">
+              <Target size={40} className="mx-auto text-purple-300 mb-3" />
+              <h3 className="text-lg font-medium text-gray-700 mb-1">No goals yet</h3>
+              <p className="text-gray-500 mb-4">Create your first goal to start tracking your progress</p>
+              <button
+                onClick={() => setIsCreatingGoal(true)}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md inline-flex items-center gap-1 transition-colors"
+              >
+                <Plus size={16} />
+                Add Goal
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {goals.map((goal) => (
+                <div 
+                  key={goal.id}
+                  className="p-4 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-800 mb-1">{goal.title}</h3>
+                      {goal.description && (
+                        <p className="text-gray-600 text-sm mb-2">{goal.description}</p>
+                      )}
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setEditingGoal(goal)}
+                        className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                        title="Edit goal"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => deleteGoal(goal.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete goal"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Progress</span>
+                      <span>{goal.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-purple-500 h-2 rounded-full" 
+                        style={{ width: `${goal.progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  {/* Status and dates */}
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        goal.status === 'active' ? 'bg-green-100 text-green-800' :
+                        goal.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
+                      </span>
+                    </div>
+                    {goal.dueDate && (
+                      <div className="flex items-center text-gray-500">
+                        <Calendar size={14} className="mr-1" />
+                        <span>Due {new Date(goal.dueDate).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Goal creation flow - appears when creating a new goal */}
+      {/* Goal Creation Modal */}
       {isCreatingGoal && (
         <div className="bg-white rounded-lg shadow-md p-5 mb-6 transition-all">
           {/* Creation step indicator */}

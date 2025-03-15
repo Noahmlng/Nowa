@@ -97,7 +97,7 @@ export default function Sidebar() {
    * These are not stored in the database but are hardcoded
    */
   const defaultLists = [
-    { id: 'goals', name: 'Goals', icon: <Target size={18} className="text-purple-500" /> },
+    { id: 'goals', name: 'My Goals', icon: <Target size={18} className="text-purple-500" /> },
     { id: 'today', name: 'My Day', icon: <Sun size={18} className="text-blue-500" /> },
     { 
       id: 'important', 
