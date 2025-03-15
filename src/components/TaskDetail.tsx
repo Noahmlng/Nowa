@@ -87,11 +87,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState(''); // Track edited subtask title
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
   const [descriptionLineCount, setDescriptionLineCount] = useState(0); // 跟踪描述的行数
+  const [subtaskWidths, setSubtaskWidths] = useState<{[key: string]: boolean}>({}); // 跟踪子任务文本是否需要截断
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const editSubtaskInputRef = useRef<HTMLTextAreaElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
+  const subtaskContainerRef = useRef<HTMLDivElement>(null);
 
   // Update local state when task changes
   useEffect(() => {
@@ -127,6 +129,34 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       setDescriptionLineCount(0);
     }
   }, [editedTask.description]);
+
+  // 计算子任务文本是否需要截断
+  useEffect(() => {
+    if (!editedTask.subtasks || editedTask.subtasks.length === 0 || !subtaskContainerRef.current) return;
+    
+    // 获取容器宽度
+    const containerWidth = subtaskContainerRef.current.clientWidth - 60; // 减去图标和边距空间
+    
+    // 创建临时span来测量文本宽度
+    const span = document.createElement('span');
+    span.style.visibility = 'hidden';
+    span.style.position = 'absolute';
+    span.style.fontSize = '0.875rem'; // text-sm
+    span.style.fontFamily = 'sans-serif';
+    span.style.whiteSpace = 'nowrap';
+    document.body.appendChild(span);
+    
+    // 测量每个子任务文本宽度
+    const newSubtaskWidths: {[key: string]: boolean} = {};
+    editedTask.subtasks.forEach(subtask => {
+      span.textContent = subtask.title;
+      const textWidth = span.offsetWidth;
+      newSubtaskWidths[subtask.id] = textWidth > containerWidth;
+    });
+    
+    document.body.removeChild(span);
+    setSubtaskWidths(newSubtaskWidths);
+  }, [editedTask.subtasks, isOpen]);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -859,7 +889,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
             </div>
             
             {/* Subtasks section */}
-            <div className="border-b border-gray-100 pb-6 mb-6">
+            <div className="border-b border-gray-100 pb-6 mb-6" ref={subtaskContainerRef}>
               {/* Subtasks list */}
               <ul className="space-y-2 mb-3">
                 {editedTask.subtasks?.map(subtask => (
@@ -914,14 +944,9 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                         className="flex-1 cursor-text group"
                         onClick={(e) => handleStartEditingSubtask(subtask, e)}
                       >
-                        <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal transition-all duration-200`}>
-                          {subtask.title.length > 26 ? (
-                            <span title={subtask.title}>
-                              {subtask.title.substring(0, 24)}...
-                            </span>
-                          ) : (
-                            subtask.title
-                          )}
+                        <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal transition-all duration-200`}
+                           title={subtaskWidths[subtask.id] ? subtask.title : undefined}>
+                          {subtask.title}
                         </p>
                       </div>
                     )}
