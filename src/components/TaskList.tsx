@@ -462,13 +462,13 @@ export default function TaskList({ filter }: TaskListProps) {
                               />
                             </div>
                           ) : (
-                            <div 
-                              className="group cursor-text"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                            <div className="flex-1">
                               <span 
-                                className={`flex-1 inline-block py-1 px-2 rounded hover:bg-gray-100 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
-                                onClick={(e) => handleStartEditingTask(task, e)}
+                                className={`inline-block py-1 px-2 rounded hover:bg-gray-100 cursor-text ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEditingTask(task, e);
+                                }}
                               >
                                 {task.title}
                               </span>
