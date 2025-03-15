@@ -291,8 +291,8 @@ export default function TaskList({ filter }: TaskListProps) {
       subtasks
     });
     
-    // 关闭详情面板
-    setIsDetailOpen(false);
+    // 不再关闭详情面板，保持展开状态
+    // setIsDetailOpen(false);
   };
 
   /**
