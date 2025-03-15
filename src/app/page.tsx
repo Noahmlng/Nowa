@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { useState } from 'react';
 import { useAppStore } from '@/store/store';
 import TaskList from '@/components/TaskList';
-import GoalList from '@/components/GoalList';
+import EnhancedGoalList from '@/components/EnhancedGoalList';
 import Sidebar from '@/components/Sidebar';
 import DailySummary from '@/components/DailySummary';
 import { BarChart2, Calendar } from 'lucide-react';
@@ -120,7 +120,7 @@ export default function Home() {
         {/* Page content */}
         <div className="flex-1 px-6 pt-3">
           {selectedList === 'goals' ? (
-            <GoalList />
+            <EnhancedGoalList />
           ) : (
             <TaskList filter={selectedList} />
           )}
