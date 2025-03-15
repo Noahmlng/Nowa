@@ -849,7 +849,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     </button>
                     
                     {/* 完成动画效果 - 划线 */}
-                    {false && (subtask.completed || completingSubtaskId === subtask.id) && (
+                    {(subtask.completed || completingSubtaskId === subtask.id) && (
                       <div 
                         className="absolute h-[1px] bg-gray-400 left-7 right-8 top-3 transform -translate-y-1/2 transition-all duration-300 ease-in-out"
                         style={{ 
@@ -880,7 +880,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                         className="flex-1 cursor-text group"
                         onClick={(e) => handleStartEditingSubtask(subtask, e)}
                       >
-                        <p className="text-sm text-gray-700 overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal">
+                        <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal`}>
                           {subtask.title}
                         </p>
                       </div>
