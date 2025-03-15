@@ -965,13 +965,28 @@ ${continuedFeedback}
                                       </div>
                                       
                                       {/* Goal number icon */}
-                                      <div className="flex-shrink-0 mr-2">
-                                        <div className="w-6 h-6 rounded bg-purple-100 flex items-center justify-center text-purple-700 font-medium text-sm">
+                                      <div className="flex-shrink-0 mr-2 flex items-center">
+                                        <div className={`
+                                          min-w-[28px] text-center px-2 py-0.5 rounded 
+                                          flex items-center justify-center 
+                                          text-white font-medium text-base
+                                          ${index === 0 ? 'bg-red-600' : 
+                                            index === 1 ? 'bg-red-400' : 
+                                            index === 2 ? 'bg-red-300' : 
+                                            index === 3 ? 'bg-blue-500' : 
+                                            index === 4 ? 'bg-green-500' : 
+                                            index === 5 ? 'bg-yellow-500' : 
+                                            index === 6 ? 'bg-purple-500' : 
+                                            index === 7 ? 'bg-indigo-500' : 
+                                            index === 8 ? 'bg-pink-500' : 
+                                            'bg-gray-500'
+                                          }
+                                        `}>
                                           {index + 1}
                                         </div>
                                       </div>
                                       
-                                      <div>
+                                      <div className="flex items-center">
                                         <h3 className="text-base font-medium text-gray-900 hover:bg-gray-100 py-1 px-2 rounded cursor-text group-hover:bg-gray-100">
                                           {goal.title}
                                         </h3>
