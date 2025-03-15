@@ -130,38 +130,53 @@ export default function TaskList({ filter }: TaskListProps) {
    * - Future dates: Tasks with future due dates (grouped by date)
    * - Upcoming: Tasks without a due date
    */
-  const groupedTasks = filteredTasks.reduce((groups, task) => {
-    // 在 My Day 视图中，按照完成状态分组，未完成的在上面，已完成的在下面
-    if (filter === 'today') {
+  const groupedTasks: Record<string, Task[]> = {};
+  
+  // 在 My Day 视图中，先创建分组以确保顺序
+  if (filter === 'today') {
+    // 确保未完成分区在前面，已完成分区在后面
+    groupedTasks['未完成'] = [];
+    groupedTasks['已完成'] = [];
+    
+    // 然后填充任务
+    filteredTasks.forEach(task => {
       const group = task.status === 'completed' ? '已完成' : '未完成';
-      if (!groups[group]) {
-        groups[group] = [];
-      }
-      groups[group].push(task as Task);
-      return groups;
-    }
+      groupedTasks[group].push(task);
+    });
     
+    // 对每个分组内的任务进行排序
+    groupedTasks['未完成'] = sortTasksByImportance(groupedTasks['未完成']);
+    groupedTasks['已完成'] = sortTasksByImportance(groupedTasks['已完成']);
+  } else {
     // 其他视图保持原有分组逻辑
-    let group = '计划中'; // 将无截止日期的任务归入"计划中"组
-    
-    if (task.dueDate) {
-      const date = parseISO(task.dueDate);
-      if (isToday(date)) {
-        group = 'Today';
-      } else if (isFuture(date)) {
-        group = format(date, 'EEEE, MMMM d');
-      } else if (isPast(date)) {
-        group = 'Overdue';
+    filteredTasks.forEach(task => {
+      let group = '计划中'; // 将无截止日期的任务归入"计划中"组
+      
+      if (task.dueDate) {
+        const date = parseISO(task.dueDate);
+        if (isToday(date)) {
+          group = 'Today';
+        } else if (isFuture(date)) {
+          group = format(date, 'EEEE, MMMM d');
+        } else if (isPast(date)) {
+          group = 'Overdue';
+        }
       }
-    }
+      
+      if (!groupedTasks[group]) {
+        groupedTasks[group] = [];
+      }
+      
+      groupedTasks[group].push(task);
+    });
     
-    if (!groups[group]) {
-      groups[group] = [];
-    }
-    
-    groups[group].push(task as Task);
-    return groups;
-  }, {} as Record<string, Task[]>);
+    // 对每个分组内的任务进行排序
+    Object.keys(groupedTasks).forEach(group => {
+      if (groupedTasks[group]) {
+        groupedTasks[group] = sortTasksByImportance(groupedTasks[group]);
+      }
+    });
+  }
 
   /**
    * Sort groups in a logical order:
@@ -368,30 +383,6 @@ export default function TaskList({ filter }: TaskListProps) {
     }
   };
 
-  // Sort all tasks by the appropriate criteria
-  if (filter === 'today') {
-    // For My Day view, sort all tasks by importance and completion status
-    const pendingTasks = filteredTasks.filter(task => task.status === 'pending');
-    const completedTasks = filteredTasks.filter(task => task.status === 'completed');
-    
-    // Sort pending tasks by importance
-    const sortedPendingTasks = sortTasksByImportance(pendingTasks);
-    
-    // Sort completed tasks by importance and completion time
-    const sortedCompletedTasks = sortTasksByImportance(completedTasks);
-    
-    // Create the grouped tasks object
-    groupedTasks['未完成'] = sortedPendingTasks;
-    groupedTasks['已完成'] = sortedCompletedTasks;
-  } else {
-    // For other views, sort tasks within each group
-    Object.keys(groupedTasks).forEach(group => {
-      if (groupedTasks[group]) {
-        groupedTasks[group] = sortTasksByImportance(groupedTasks[group]);
-      }
-    });
-  }
-
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       {/* Task input */}
@@ -458,7 +449,7 @@ export default function TaskList({ filter }: TaskListProps) {
                               <input
                                 ref={editTaskInputRef}
                                 type="text"
-                                className="w-full border-b border-blue-500 focus:outline-none py-1 px-0"
+                                className="w-full border-b border-blue-500 focus:outline-none py-1 px-2"
                                 value={editingTaskTitle}
                                 onChange={(e) => setEditingTaskTitle(e.target.value)}
                                 onBlur={handleSaveTaskTitle}
@@ -476,7 +467,7 @@ export default function TaskList({ filter }: TaskListProps) {
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span 
-                                className={`flex-1 group-hover:bg-gray-100 py-1 px-2 rounded ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
+                                className={`flex-1 inline-block py-1 px-2 rounded hover:bg-gray-100 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
                                 onClick={(e) => handleStartEditingTask(task, e)}
                               >
                                 {task.title}
