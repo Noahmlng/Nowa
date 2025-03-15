@@ -469,146 +469,149 @@ export default function TaskList({ filter }: TaskListProps) {
       {/* Task List */}
       <div className="flex-1 overflow-y-auto pb-16">
         {Object.entries(groupedTasks).map(([group, tasksInGroup]) => (
-          <div key={group} className="mb-6">
-            <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              {group}
-            </h3>
-            <ul className="divide-y divide-gray-200">
-              {tasksInGroup.map((task) => (
-                <li 
-                  key={task.id} 
-                  className="relative px-4 py-3 hover:bg-gray-50 transition-colors"
-                >
-                  {aiSuggestTaskId === task.id && (
-                    <div className="relative z-20">
-                      <TaskSuggestions 
-                        taskId={task.id} 
-                        onClose={() => setAiSuggestTaskId(null)}
-                      />
-                    </div>
-                  )}
-                  
-                  <div className="flex items-start gap-3">
-                    {/* Task completion toggle */}
-                    <button
-                      className="flex-shrink-0 mt-0.5"
-                      onClick={() => toggleTaskComplete(task.id)}
-                    >
-                      {task.status === 'completed' ? (
-                        <CheckCircle className="h-5 w-5 text-blue-500" />
-                      ) : (
-                        <div className="h-5 w-5 rounded-full border border-gray-300"></div>
-                      )}
-                    </button>
+          // Only render the section if it has tasks
+          tasksInGroup.length > 0 ? (
+            <div key={group} className="mb-6">
+              <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                {group}
+              </h3>
+              <ul className="divide-y divide-gray-200">
+                {tasksInGroup.map((task) => (
+                  <li 
+                    key={task.id} 
+                    className="relative px-4 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    {aiSuggestTaskId === task.id && (
+                      <div className="relative z-20">
+                        <TaskSuggestions 
+                          taskId={task.id} 
+                          onClose={() => setAiSuggestTaskId(null)}
+                        />
+                      </div>
+                    )}
                     
-                    {/* Task content */}
-                    <div className="flex-1 min-w-0" onClick={() => handleOpenDetail(task)}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          {editingTaskId === task.id ? (
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <input
-                                ref={editTaskInputRef}
-                                type="text"
-                                className="w-full border-b border-blue-500 focus:outline-none py-1 px-2"
-                                value={editingTaskTitle}
-                                onChange={(e) => setEditingTaskTitle(e.target.value)}
-                                onBlur={handleSaveTaskTitle}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleSaveTaskTitle();
-                                  }
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex-1">
-                              <span 
-                                className={`inline ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStartEditingTask(task, e);
-                                }}
-                              >
-                                {task.title}
-                              </span>
-                            </div>
-                          )}
-                          
-                          {/* Task metadata - reordered as requested */}
-                          <div className="mt-2 space-y-1">
-                            {/* Display associated goal if present - now at the top */}
-                            {task.goalId && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <Target className="h-3 w-3 mr-1 text-purple-500" />
-                                {getAssociatedGoalName(task.goalId)}
+                    <div className="flex items-start gap-3">
+                      {/* Task completion toggle */}
+                      <button
+                        className="flex-shrink-0 mt-0.5"
+                        onClick={() => toggleTaskComplete(task.id)}
+                      >
+                        {task.status === 'completed' ? (
+                          <CheckCircle className="h-5 w-5 text-blue-500" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full border border-gray-300"></div>
+                        )}
+                      </button>
+                      
+                      {/* Task content */}
+                      <div className="flex-1 min-w-0" onClick={() => handleOpenDetail(task)}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            {editingTaskId === task.id ? (
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  ref={editTaskInputRef}
+                                  type="text"
+                                  className="w-full border-b border-blue-500 focus:outline-none py-1 px-2"
+                                  value={editingTaskTitle}
+                                  onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                  onBlur={handleSaveTaskTitle}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveTaskTitle();
+                                    }
+                                  }}
+                                />
                               </div>
-                            )}
-                            
-                            {/* Display subtasks count if present - now in the middle */}
-                            {task.subtasks && task.subtasks.length > 0 && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <ClipboardList className="h-3 w-3 mr-1" />
-                                {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length} subtasks
-                              </div>
-                            )}
-                            
-                            {/* Due date if present - now at the bottom */}
-                            {task.dueDate && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                <span>
-                                  {isToday(parseISO(task.dueDate))
-                                    ? 'Today'
-                                    : format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                            ) : (
+                              <div className="flex-1">
+                                <span 
+                                  className={`inline ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartEditingTask(task, e);
+                                  }}
+                                >
+                                  {task.title}
                                 </span>
                               </div>
                             )}
+                            
+                            {/* Task metadata - reordered as requested */}
+                            <div className="mt-2 space-y-1">
+                              {/* Display associated goal if present - now at the top */}
+                              {task.goalId && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <Target className="h-3 w-3 mr-1 text-purple-500" />
+                                  {getAssociatedGoalName(task.goalId)}
+                                </div>
+                              )}
+                              
+                              {/* Display subtasks count if present - now in the middle */}
+                              {task.subtasks && task.subtasks.length > 0 && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <ClipboardList className="h-3 w-3 mr-1" />
+                                  {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length} subtasks
+                                </div>
+                              )}
+                              
+                              {/* Due date if present - now at the bottom */}
+                              {task.dueDate && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <Calendar className="h-3 w-3 mr-1" />
+                                  <span>
+                                    {isToday(parseISO(task.dueDate))
+                                      ? 'Today'
+                                      : format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div className="flex items-center space-x-1">
-                          {/* Important flag button */}
-                          <button 
-                            className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-300'}`}
-                            onClick={(e) => handleToggleImportant(task.id, e)}
-                            title={task.important ? "取消重要标记" : "标记为重要"}
-                          >
-                            <Flag size={16} />
-                          </button>
                           
-                          {/* AI Suggestions button */}
-                          <button
-                            className="text-gray-400 hover:text-purple-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                            onClick={(e) => handleShowAiSuggestions(task.id, e)}
-                            title="Get AI suggestions"
-                          >
-                            <Zap className="h-4 w-4" />
-                          </button>
-                          
-                          {/* Delete button */}
-                          <button
-                            className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteTask(task.id);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center space-x-1">
+                            {/* Important flag button */}
+                            <button 
+                              className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-300'}`}
+                              onClick={(e) => handleToggleImportant(task.id, e)}
+                              title={task.important ? "取消重要标记" : "标记为重要"}
+                            >
+                              <Flag size={16} />
+                            </button>
+                            
+                            {/* AI Suggestions button */}
+                            <button
+                              className="text-gray-400 hover:text-purple-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                              onClick={(e) => handleShowAiSuggestions(task.id, e)}
+                              title="Get AI suggestions"
+                            >
+                              <Zap className="h-4 w-4" />
+                            </button>
+                            
+                            {/* Delete button */}
+                            <button
+                              className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteTask(task.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null
         ))}
         
-        {/* Empty state */}
-        {Object.keys(groupedTasks).length === 0 && (
+        {/* Empty state - show only when there are no tasks at all */}
+        {filteredTasks.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400">
             <ClipboardList className="h-12 w-12 mb-2" />
             <p>No tasks to show</p>
