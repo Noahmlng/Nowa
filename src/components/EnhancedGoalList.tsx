@@ -888,18 +888,6 @@ ${continuedFeedback}
       {/* Goals List Section */}
       {!isCreatingGoal && (
         <div className="flex-1 overflow-y-auto space-y-4 pb-20">
-          {/* Header with Add Goal button */}
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-800">My Goals</h2>
-            <button
-              onClick={() => setIsCreatingGoal(true)}
-              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md flex items-center gap-1 transition-colors"
-            >
-              <Plus size={16} />
-              Add Goal
-            </button>
-          </div>
-          
           {/* Goals List */}
           {goals.length === 0 ? (
             <div className="text-center py-10 bg-white rounded-lg border border-gray-200">
