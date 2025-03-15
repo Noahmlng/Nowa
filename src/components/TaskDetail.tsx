@@ -88,7 +88,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
-  const editSubtaskInputRef = useRef<HTMLInputElement>(null);
+  const editSubtaskInputRef = useRef<HTMLTextAreaElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
 
   // Update local state when task changes
@@ -860,27 +860,29 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     
                     {editingSubtaskId === subtask.id ? (
                       <div className="flex-1" onClick={(e) => e.stopPropagation()}>
-                        <input
+                        <textarea
                           ref={editSubtaskInputRef}
-                          type="text"
-                          className="w-full border-b border-blue-500 focus:outline-none py-1 px-0 text-sm"
+                          className="w-full border-b border-blue-500 focus:outline-none py-1 px-0 text-sm resize-none"
                           value={editingSubtaskTitle}
                           onChange={(e) => setEditingSubtaskTitle(e.target.value)}
                           onBlur={handleSaveSubtaskTitle}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
+                            if (e.key === 'Enter' && e.ctrlKey) {
                               e.preventDefault();
                               handleSaveSubtaskTitle();
                             }
                           }}
+                          rows={3}
+                          style={{ minHeight: '60px' }}
                         />
+                        <div className="text-xs text-gray-500 mt-1">按Ctrl+Enter保存</div>
                       </div>
                     ) : (
                       <div 
                         className="flex-1 cursor-text group"
                         onClick={(e) => handleStartEditingSubtask(subtask, e)}
                       >
-                        <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal`}>
+                        <p className={`text-sm ${subtask.completed ? 'text-gray-500 line-through' : 'text-gray-700'} overflow-hidden text-ellipsis whitespace-nowrap group-hover:whitespace-normal transition-all duration-200`}>
                           {subtask.title}
                         </p>
                       </div>
