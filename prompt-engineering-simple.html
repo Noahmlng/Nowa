@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt Engineering Tool</title>
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --background: #f9fafb;
+      --foreground: #111827;
+      --muted: #e5e7eb;
+      --muted-foreground: #6b7280;
+      --border: #e2e8f0;
+      --section-gap: 2rem;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--background);
+      color: var(--foreground);
+      line-height: 1.5;
+      padding-bottom: 4rem;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--primary);
+    }
+    
+    .section {
+      background-color: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+      margin-bottom: var(--section-gap);
+      padding: 1.5rem;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+    }
+    
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      border: 1px solid var(--border);
+      font-family: inherit;
+      font-size: 0.875rem;
+    }
+    
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+    
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+      transition: background-color 0.15s, transform 0.1s;
+      border: none;
+    }
+    
+    .btn:active {
+      transform: translateY(1px);
+    }
+    
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+    
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .slider {
+      width: 100%;
+    }
+    
+    .code-block {
+      background-color: #f1f5f9;
+      border-radius: 0.375rem;
+      padding: 1rem;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875rem;
+      min-height: 100px;
+      max-height: 300px;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 1.5rem;
+      height: 1.5rem;
+      border: 3px solid rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 0.5rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .flex {
+      display: flex;
+      gap: 1rem;
+    }
+    
+    .flex-col {
+      flex-direction: column;
+    }
+    
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    .parameter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+      .grid-2, .parameter-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Prompt Engineering 可视化工具</h1>
+    
+    <!-- 1. Mock Data Generation Section -->
+    <div class="section">
+      <h2>1. 模拟数据生成</h2>
+      <div class="form-group">
+        <label for="targetGoal">目标/目标活动</label>
+        <input type="text" id="targetGoal" placeholder="例如：健身减重、学习编程、提升工作效率">
+      </div>
+      
+      <button class="btn btn-primary" id="generateMockData">生成模拟数据</button>
+      
+      <div class="grid-2" style="margin-top: 1.5rem;">
+        <div class="form-group">
+          <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">用户画像</h3>
+          <div class="code-block" id="mockUserProfile">尚未生成用户数据</div>
+        </div>
+        
+        <div class="form-group">
+          <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">任务数据</h3>
+          <div class="code-block" id="mockTasks">尚未生成任务数据</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 2. User Prompt Configuration Section -->
+    <div class="section">
+      <h2>2. User Prompt 配置</h2>
+      
+      <div class="form-group">
+        <label for="userPromptTemplate">User Prompt Template</label>
+        <textarea id="userPromptTemplate" rows="8"></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label for="customTaskName">自定义任务名称</label>
+        <input type="text" id="customTaskName" placeholder="输入要处理的具体任务名称，例如：一天不吃碳水、运动30分钟">
+      </div>
+      
+      <button class="btn btn-primary" id="previewPrompt">预览生成的 Prompt</button>
+      <button class="btn btn-primary" id="testHistoryParam" style="margin-left: 10px;">测试 History 参数</button>
+      
+      <div class="form-group" style="margin-top: 1rem;">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Prompt 预览</h3>
+        <div class="code-block" id="promptPreview">点击上方按钮预览生成的 prompt</div>
+      </div>
+      
+      <div class="form-group" style="margin-top: 1rem;">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">History 参数测试结果</h3>
+        <div class="code-block" id="historyParamTest">点击"测试 History 参数"按钮查看结果</div>
+      </div>
+    </div>
+    
+    <!-- 3. Generated Prompt Section -->
+    <div class="section">
+      <h2>3. Prompt 生成与测试</h2>
+      
+      <div class="form-group">
+        <label for="systemPrompt">System Prompt</label>
+        <textarea id="systemPrompt" rows="8"></textarea>
+      </div>
+      
+      <div class="form-group">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">API 参数调整</h3>
+        <div class="parameter-grid">
+          <div class="slider-container">
+            <label for="temperature">Temperature: <span id="temperatureValue">0.7</span></label>
+            <input type="range" id="temperature" class="slider" min="0" max="1" step="0.1" value="0.7">
+          </div>
+          
+          <div class="slider-container">
+            <label for="topP">Top P: <span id="topPValue">0.7</span></label>
+            <input type="range" id="topP" class="slider" min="0" max="1" step="0.1" value="0.7">
+          </div>
+          
+          <div class="slider-container">
+            <label for="maxTokens">Max Tokens: <span id="maxTokensValue">800</span></label>
+            <input type="range" id="maxTokens" class="slider" min="100" max="2000" step="100" value="800">
+          </div>
+          
+          <div class="slider-container">
+            <label for="presencePenalty">Presence Penalty: <span id="presencePenaltyValue">0.2</span></label>
+            <input type="range" id="presencePenalty" class="slider" min="0" max="2" step="0.1" value="0.2">
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="generatedPrompt">Prompt 内容</label>
+        <textarea id="generatedPrompt" rows="6"></textarea>
+      </div>
+      
+      <div style="margin-bottom: 1.5rem;">
+        <button class="btn btn-primary" id="callApi">
+          <span class="loading hidden" id="apiLoading"></span>
+          请求 DeepSeek API
+        </button>
+      </div>
+      
+      <div class="form-group">
+        <label for="aiResponse">AI 响应</label>
+        <div class="code-block" id="aiResponse">尚未请求 API</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 配置
+    const config = {
+      deepseekApiUrl: 'https://api.deepseek.com/v1/chat/completions',
+      deepseekApiKey: 'sk-7f59d498e8904813a64af73a46a91735', // 更新为您的 API 密钥
+      deepseekModel: 'deepseek-chat',
+      defaultSystemPrompt: `你是一个全能型任务管理专家，具备以下能力架构：
+
+【核心角色】  
+1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  
+2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  
+3. **方案架构师**：生成结构化提案  
+
+【跨领域知识库】  
+- 健康管理：运动医学/营养学/康复原理  
+- 学习规划：认知科学/时间管理/知识体系构建  
+- 职业发展：OKR制定/技能迁移策略/行业趋势分析  
+
+【交互协议】  
+1. 提案必须包含：  
+   - 风险评估（使用❗️分级标记）  
+   - 领域交叉建议（如「学习计划与生物钟匹配度」）  
+   - 3种可选路径（保守/平衡/激进策略）  
+2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）`,
+      defaultUserPromptTemplate: `请处理任务「{{taskTitle}}」：
+
+【用户画像】
+◆ 基础档案：{{basicInfo}}
+◆ 能力特征：{{abilities}}
+◆ 历史轨迹：{{history}}
+
+【任务上下文】
+★ 显性需求：{{taskTitle}}
+★ 隐性需求：{{implicitNeeds}}
+★ 约束条件：{{constraints}}`
+    };
+
+    // 状态管理
+    const state = {
+      systemPrompt: config.defaultSystemPrompt,
+      userPromptTemplate: config.defaultUserPromptTemplate,
+      targetGoal: '',
+      userProfile: null,
+      tasks: [],
+      selectedTask: null,
+      generatedPrompt: '',
+      temperature: 0.7,
+      topP: 0.7,
+      maxTokens: 800,
+      presencePenalty: 0.2,
+      aiResponse: ''
+    };
+
+    // 模拟数据
+    const mockData = {
+      occupations: [
+        '软件工程师', '教师', '营销专员', '学生', '健身教练', 
+        '医生', '设计师', '作家', '企业家', '研究员'
+      ],
+      locations: [
+        '北京', '上海', '广州', '深圳', '杭州', 
+        '成都', '南京', '武汉', '西安', '苏州'
+      ],
+      strengths: [
+        '专注', '创造力', '分析思维', '耐心', '组织能力',
+        '沟通能力', '适应性强', '解决问题能力', '团队合作', '技术精通'
+      ],
+      weaknesses: [
+        '拖延', '注意力分散', '过度思考', '缺乏自信', '过度完美主义',
+        '缺乏耐心', '抗压能力弱', '不擅长沟通', '时间管理差', '容易分心'
+      ],
+      interests: [
+        'AI', '编程', '阅读', '旅行', '摄影',
+        '音乐', '电影', '健身', '烹饪', '绘画'
+      ],
+      hobbies: [
+        '跑步', '游泳', '爬山', '阅读', '写作',
+        '摄影', '烹饪', '园艺', '冥想', '学习新语言'
+      ],
+      goals: [
+        '减重10公斤', '学习一门新语言', '跑完马拉松', '提高工作效率',
+        '获得编程认证', '开始一个副业', '改善睡眠质量', '每天读书1小时',
+        '拓展社交圈', '每月存15%收入'
+      ],
+      constraints: [
+        '每天工作9小时', '周末有家庭时间', '膝盖有旧伤', 
+        '睡眠时间少于7小时', '预算有限', '上下班通勤时间长',
+        '每天只有30分钟自由时间', '时差倒换经常出差'
+      ],
+      completionFeedback: [
+        '完成得不错，但过程中感到有些疲惫',
+        '顺利完成，体验很棒',
+        '完成了，但比预期花了更多时间',
+        '完成了，感觉自信心提升',
+        '圆满完成，有成就感'
+      ],
+      notCompletedFeedback: [
+        '时间不够，无法完成',
+        '遇到了技术困难，需要帮助',
+        '精力不足，感到疲惫',
+        '优先级改变，推迟',
+        '缺乏必要资源'
+      ],
+      // 不同类型目标的具体任务
+      specificTasks: {
+        // 健身减重相关
+        '减重': [
+          '完成30分钟有氧运动', '一天不吃精制碳水', '记录一天的卡路里摄入', 
+          '完成HIIT训练20分钟', '饮食中减少50%的糖分', '增加蛋白质摄入至100g',
+          '连续3天每餐吃蔬菜', '跑步5公里', '每天喝3升水', '进行16:8间歇性断食',
+          '不吃零食一整天', '减少晚餐碳水摄入', '测量并记录体脂率', '做50个俯卧撑',
+          '学习一个健康食谱并尝试', '每天步行10000步'
+        ],
+        // 学习相关
+        '学习': [
+          '完成一章课本阅读', '做30分钟练习题', '观看一个教学视频', 
+          '制作学习笔记', '与学习伙伴一起复习', '完成一次模拟测试',
+          '阅读相关领域文章', '参加一次线上讲座', '制定下周学习计划',
+          '整理知识思维导图', '学习10个新词汇/概念', '完成一次小项目实践'
+        ],
+        // 编程相关
+        '编程': [
+          '解决一个编程挑战', '学习一个新的函数/方法', '阅读技术文档30分钟', 
+          '重构现有代码', '编写单元测试', '完成一个小功能开发',
+          '修复一个bug', '优化代码性能', '学习一个新的库/框架', 
+          '参与开源项目', '完成一次代码审查', '配置开发环境'
+        ],
+        // 工作效率相关
+        '效率': [
+          '使用番茄工作法工作3小时', '清理邮箱', '制定明日任务清单', 
+          '学习一个快捷键技巧', '整理工作环境', '尝试一个新的效率工具',
+          '批量处理类似任务', '委派一项可委派的任务', '进行工作回顾', 
+          '设置自动化流程', '减少会议时间', '优先处理重要任务'
+        ],
+        // 阅读相关
+        '阅读': [
+          '阅读20页书', '做阅读笔记', '分享一本书的见解', 
+          '尝试速读技巧', '阅读不同类型的书', '制定阅读清单',
+          '参加读书会', '听有声读物20分钟', '总结一章内容', 
+          '实践书中的一个建议', '写书评', '与朋友讨论读物'
+        ],
+        // 写作相关
+        '写作': [
+          '写作500字', '编辑昨天的内容', '构思新文章大纲', 
+          '投稿一篇文章', '阅读写作技巧', '记录灵感',
+          '获取反馈并修改', '学习一个写作技巧', '设定写作目标', 
+          '参加写作挑战', '分享作品', '研究目标受众'
+        ],
+        // 副业相关
+        '副业': [
+          '市场调研1小时', '学习相关技能30分钟', '制定业务计划', 
+          '联系潜在客户', '创建社交媒体账号', '制作产品原型',
+          '优化销售流程', '分析竞争对手', '设计营销材料', 
+          '计算成本和定价', '寻找合作伙伴', '获取用户反馈'
+        ],
+        // 睡眠改善相关
+        '睡眠': [
+          '晚上10点前上床', '睡前1小时不看屏幕', '创建舒适的睡眠环境', 
+          '睡前冥想10分钟', '记录睡眠质量', '减少咖啡因摄入',
+          '尝试放松技巧', '保持规律作息', '睡前读书15分钟', 
+          '调整卧室温度', '使用白噪音助眠', '白天适量运动'
+        ],
+        // 社交相关
+        '社交': [
+          '参加一次社交活动', '联系一位老朋友', '加入兴趣小组', 
+          '主动介绍自己给新认识的人', '安排一次聚餐', '学习倾听技巧',
+          '参加志愿活动', '发起一次团队活动', '给朋友送礼物/帮助', 
+          '参加一次讲座/工作坊', '尝试一项团队运动', '练习社交开场白'
+        ],
+        // 财务相关
+        '财务': [
+          '追踪一天的开支', '制定月度预算', '研究投资选项', 
+          '设置自动储蓄', '取消不必要的订阅', '比较价格后再购买',
+          '学习一个理财概念', '审核银行对账单', '设立应急基金', 
+          '与家人讨论财务计划', '计算净资产', '寻找增加收入的方式'
+        ],
+        // 默认任务
+        '默认': [
+          '制定详细计划', '研究最佳实践', '寻找专业建议', 
+          '设定阶段性目标', '记录进度', '分析遇到的障碍',
+          '调整实施策略', '庆祝小成就', '反思经验教训', 
+          '寻找同伴互相督促', '准备必要资源', '制定应对挫折的策略'
+        ]
+      }
+    };
+
+    // DOM 元素
+    const elements = {
+      targetGoal: document.getElementById('targetGoal'),
+      generateMockData: document.getElementById('generateMockData'),
+      mockUserProfile: document.getElementById('mockUserProfile'),
+      mockTasks: document.getElementById('mockTasks'),
+      systemPrompt: document.getElementById('systemPrompt'),
+      userPromptTemplate: document.getElementById('userPromptTemplate'),
+      customTaskName: document.getElementById('customTaskName'),
+      temperature: document.getElementById('temperature'),
+      temperatureValue: document.getElementById('temperatureValue'),
+      topP: document.getElementById('topP'),
+      topPValue: document.getElementById('topPValue'),
+      maxTokens: document.getElementById('maxTokens'),
+      maxTokensValue: document.getElementById('maxTokensValue'),
+      presencePenalty: document.getElementById('presencePenalty'),
+      presencePenaltyValue: document.getElementById('presencePenaltyValue'),
+      previewPrompt: document.getElementById('previewPrompt'),
+      promptPreview: document.getElementById('promptPreview'),
+      generatePrompt: document.getElementById('generatedPrompt'),
+      generatedPrompt: document.getElementById('generatedPrompt'),
+      callApi: document.getElementById('callApi'),
+      apiLoading: document.getElementById('apiLoading'),
+      aiResponse: document.getElementById('aiResponse')
+    };
+
+    // 辅助函数
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function getRandomItem(array) {
+      return array[Math.floor(Math.random() * array.length)];
+    }
+
+    function getRandomItems(array, count) {
+      const shuffled = [...array].sort(() => 0.5 - Math.random());
+      return shuffled.slice(0, count);
+    }
+
+    // 核心功能
+    function generateRandomUserProfile(userInputGoal = '') {
+      // Random age between 18 and 65
+      const age = getRandomInt(18, 65);
+      
+      // Random height between 155 and 195 cm
+      const height = `${getRandomInt(155, 195)}cm`;
+      
+      // Random weight between 45 and 95 kg
+      const weight = `${getRandomInt(45, 95)}kg`;
+      
+      // Get 1-2 random goals from the list, but ensure the user input goal is included
+      let goals = getRandomItems(mockData.goals, getRandomInt(1, 2));
+      if (userInputGoal && !goals.includes(userInputGoal)) {
+        goals.unshift(userInputGoal); // Add user goal to the beginning of the array
+      }
+      
+      return {
+        age,
+        occupation: getRandomItem(mockData.occupations),
+        location: getRandomItem(mockData.locations),
+        height,
+        weight,
+        strengths: getRandomItems(mockData.strengths, getRandomInt(1, 3)),
+        weaknesses: getRandomItems(mockData.weaknesses, getRandomInt(1, 3)),
+        interests: getRandomItems(mockData.interests, getRandomInt(2, 4)),
+        hobbies: getRandomItems(mockData.hobbies, getRandomInt(2, 4)),
+        goals,
+        constraints: getRandomItems(mockData.constraints, getRandomInt(0, 2))
+      };
+    }
+
+    function generateRandomTasks(goalName, count = 5) {
+      const tasks = [];
+      const statuses = ['completed', 'inProgress', 'notStarted'];
+      
+      // 根据目标确定任务类别
+      let taskCategory = '默认';
+      const goalKeywords = {
+        '减重': ['减重', '减肥', '瘦身', '体重', '健身', '塑形', '减脂', '体脂', '公斤', 'kg'],
+        '学习': ['学习', '学校', '课程', '考试', '考证', '学位', '教育', '知识', '课堂'],
+        '编程': ['编程', '代码', '开发', '程序', '软件', 'Java', 'Python', '前端', '后端', 'IT'],
+        '效率': ['效率', '生产力', '工作', '专注', '时间管理', '任务', '规划', '工作流', '提高'],
+        '阅读': ['阅读', '读书', '书籍', '文章', '书单', '小说', '文学'],
+        '写作': ['写作', '写书', '文章', '博客', '创作', '内容', '写字'],
+        '副业': ['副业', '创业', '兼职', '收入', '生意', '项目', '赚钱', '客户'],
+        '睡眠': ['睡眠', '休息', '作息', '熬夜', '早起', '睡觉', '床', '困'],
+        '社交': ['社交', '朋友', '人际', '交流', '聊天', '社区', '圈子', '关系', '联系'],
+        '财务': ['财务', '理财', '存钱', '投资', '消费', '预算', '储蓄', '资产', '收入']
+      };
+      
+      // 根据目标名称确定最匹配的任务类别
+      for (let category in goalKeywords) {
+        if (goalKeywords[category].some(keyword => goalName.includes(keyword))) {
+          taskCategory = category;
+          break;
+        }
+      }
+      
+      // 获取对应类别的任务列表，如果没有匹配则使用默认任务
+      let specificTaskList = mockData.specificTasks[taskCategory] || mockData.specificTasks['默认'];
+      
+      // 创建过去的任务（2天前的）
+      for (let i = 0; i < 2; i++) {
+        const status = getRandomItem(statuses);
+        const isCompleted = status === 'completed';
+        const taskTitle = getRandomItem(specificTaskList);
+        
+        // 避免重复任务
+        specificTaskList = specificTaskList.filter(item => item !== taskTitle);
+        
+        tasks.push({
+          id: `task-${Date.now()}-${i}`,
+          title: taskTitle,
+          description: `这是与${goalName}相关的具体行动：${taskTitle}`,
+          status,
+          createdAt: new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString(), // 2 days ago
+          feedback: isCompleted 
+            ? getRandomItem(mockData.completionFeedback) 
+            : getRandomItem(mockData.notCompletedFeedback)
+        });
+      }
+      
+      // 创建当前任务
+      for (let i = 2; i < count; i++) {
+        const status = i === 2 ? 'inProgress' : 'notStarted';
+        const taskTitle = getRandomItem(specificTaskList);
+        
+        // 避免重复任务
+        specificTaskList = specificTaskList.filter(item => item !== taskTitle);
+        
+        // 确保所有任务都有 feedback，即使是进行中或未开始的任务
+        let feedback = '';
+        if (status === 'inProgress') {
+          feedback = `正在进行中：已完成约${getRandomInt(10, 50)}%`;
+        } else if (status === 'notStarted') {
+          feedback = `计划于${new Date(Date.now() + (getRandomInt(1, 7) * 24 * 60 * 60 * 1000)).toLocaleDateString()}开始`;
+        }
+        
+        tasks.push({
+          id: `task-${Date.now()}-${i}`,
+          title: taskTitle,
+          description: `这是与${goalName}相关的具体行动：${taskTitle}`,
+          status,
+          createdAt: new Date().toISOString(),
+          feedback: feedback
+        });
+      }
+      
+      return tasks;
+    }
+
+    function generatePrompt(userProfile, task, promptTemplate) {
+      if (!userProfile || !task) {
+        return 'Error: Missing user profile or task data.';
+      }
+      
+      // Extract basic info
+      const basicInfo = [];
+      if (userProfile.age) basicInfo.push(`年龄 ${userProfile.age}`);
+      if (userProfile.occupation) basicInfo.push(`职业 ${userProfile.occupation}`);
+      if (userProfile.location) basicInfo.push(`地理位置 ${userProfile.location}`);
+      if (userProfile.height) basicInfo.push(`身高 ${userProfile.height}`);
+      if (userProfile.weight) basicInfo.push(`体重 ${userProfile.weight}`);
+      
+      // Extract abilities
+      const abilities = [];
+      if (userProfile.strengths && userProfile.strengths.length > 0) {
+        abilities.push(`优势 ${userProfile.strengths.join('、')}`);
+      }
+      if (userProfile.weaknesses && userProfile.weaknesses.length > 0) {
+        abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
+      }
+      
+      // Replace template variables
+      let prompt = promptTemplate
+        .replace('{{taskTitle}}', task.title)
+        .replace('{{basicInfo}}', basicInfo.join('、'))
+        .replace('{{abilities}}', abilities.join('、'))
+        .replace('{{history}}', task.feedback || '无历史记录')
+        .replace('{{implicitNeeds}}', userProfile.goals?.join('、') || '未明确')
+        .replace('{{constraints}}', userProfile.constraints?.join('、') || '无特殊约束')
+        .replace('{{interests}}', userProfile.interests?.join('、') || '无特殊兴趣')
+        .replace('{{hobbies}}', userProfile.hobbies?.join('、') || '无特殊爱好');
+      
+      return prompt;
+    }
+
+    async function callDeepSeekAPI(systemPrompt, userPrompt, settings = {}) {
+      const { temperature = 0.7, topP = 0.7, maxTokens = 800, presencePenalty = 0.2 } = settings;
+
+      try {
+        const response = await fetch(config.deepseekApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.deepseekApiKey}`
+          },
+          body: JSON.stringify({
+            model: config.deepseekModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature,
+            top_p: topP,
+            max_tokens: maxTokens,
+            presence_penalty: presencePenalty
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          console.error('Error from DeepSeek API:', data);
+          return `Error: ${data.error || 'Failed to get response from API'}`;
+        }
+        
+        return data.choices[0].message.content;
+      } catch (error) {
+        console.error('Error calling DeepSeek API:', error);
+        return `Error: ${error.message || 'Unknown error'}`;
+      }
+    }
+
+    // 初始化
+    function init() {
+      // 设置默认值
+      elements.systemPrompt.value = state.systemPrompt;
+      elements.userPromptTemplate.value = state.userPromptTemplate;
+      
+      // 添加 History 参数测试按钮
+      const testHistoryParamButton = document.getElementById('testHistoryParam');
+      const historyParamTestDiv = document.getElementById('historyParamTest');
+      
+      testHistoryParamButton.addEventListener('click', () => {
+        if (!state.userProfile || !state.tasks.length) {
+          historyParamTestDiv.textContent = '请先生成模拟数据';
+          return;
+        }
+        
+        // 测试所有任务的 feedback 值
+        const taskFeedbacks = state.tasks.map((task, index) => {
+          return {
+            index,
+            title: task.title,
+            status: task.status,
+            feedback: task.feedback,
+            historyValue: task.feedback || '无历史记录',
+            inTemplate: `{{history}} 将被替换为: "${task.feedback || '无历史记录'}"`
+          };
+        });
+        
+        // 测试自定义任务
+        const customTaskName = elements.customTaskName.value.trim();
+        let customTaskFeedback = null;
+        
+        if (customTaskName) {
+          // 创建一个临时任务对象，使用自定义任务名称
+          const customTask = {
+            id: `custom-task-${Date.now()}`,
+            title: customTaskName,
+            description: `自定义任务：${customTaskName}`,
+            status: 'inProgress',
+            createdAt: new Date().toISOString(),
+            feedback: `这是一个新的自定义任务：${customTaskName}。尚未有历史记录，但您可以在此处添加相关背景信息。`
+          };
+          
+          customTaskFeedback = {
+            title: customTask.title,
+            status: customTask.status,
+            feedback: customTask.feedback,
+            historyValue: customTask.feedback || '无历史记录',
+            inTemplate: `{{history}} 将被替换为: "${customTask.feedback || '无历史记录'}"`
+          };
+        }
+        
+        // 显示当前选中任务的 history 值
+        const currentSelectedTask = state.selectedTask;
+        const currentHistoryValue = currentSelectedTask.feedback || '无历史记录';
+        
+        // 显示测试结果
+        historyParamTestDiv.textContent = JSON.stringify({
+          explanation: "{{history}} 参数来自任务的 feedback 属性，如果为空则显示'无历史记录'",
+          allTasks: taskFeedbacks,
+          customTask: customTaskFeedback,
+          selectedTask: {
+            title: currentSelectedTask.title,
+            status: currentSelectedTask.status,
+            feedback: currentSelectedTask.feedback,
+            historyValue: currentHistoryValue,
+            inTemplate: `{{history}} 将被替换为: "${currentHistoryValue}"`
+          }
+        }, null, 2);
+      });
+      
+      // 生成模拟数据
+      elements.generateMockData.addEventListener('click', () => {
+        const targetGoal = elements.targetGoal.value.trim();
+        
+        if (!targetGoal) {
+          alert('请输入目标/活动名称');
+          return;
+        }
+        
+        state.targetGoal = targetGoal;
+        state.userProfile = generateRandomUserProfile(targetGoal);
+        state.tasks = generateRandomTasks(state.targetGoal, 5);
+        state.selectedTask = state.tasks[0];
+        
+        elements.mockUserProfile.textContent = JSON.stringify(state.userProfile, null, 2);
+        elements.mockTasks.textContent = JSON.stringify(state.tasks, null, 2);
+      });
+      
+      // Slider 值更新
+      elements.temperature.addEventListener('input', e => {
+        state.temperature = parseFloat(e.target.value);
+        elements.temperatureValue.textContent = state.temperature;
+      });
+      
+      elements.topP.addEventListener('input', e => {
+        state.topP = parseFloat(e.target.value);
+        elements.topPValue.textContent = state.topP;
+      });
+      
+      elements.maxTokens.addEventListener('input', e => {
+        state.maxTokens = parseInt(e.target.value);
+        elements.maxTokensValue.textContent = state.maxTokens;
+      });
+      
+      elements.presencePenalty.addEventListener('input', e => {
+        state.presencePenalty = parseFloat(e.target.value);
+        elements.presencePenaltyValue.textContent = state.presencePenalty;
+      });
+      
+      // System Prompt 和 User Prompt Template 更新
+      elements.systemPrompt.addEventListener('input', e => {
+        state.systemPrompt = e.target.value;
+      });
+      
+      elements.userPromptTemplate.addEventListener('input', e => {
+        state.userPromptTemplate = e.target.value;
+      });
+      
+      // 预览 Prompt
+      elements.previewPrompt.addEventListener('click', () => {
+        if (!state.userProfile || !state.tasks.length) {
+          alert('请先生成模拟数据');
+          return;
+        }
+        
+        // 使用自定义任务名称或默认选择第一个任务
+        let selectedTask = state.selectedTask;
+        const customTaskName = elements.customTaskName.value.trim();
+        
+        if (customTaskName) {
+          // 创建一个临时任务对象，使用自定义任务名称
+          selectedTask = {
+            id: `custom-task-${Date.now()}`,
+            title: customTaskName,
+            description: `自定义任务：${customTaskName}`,
+            status: 'inProgress',
+            createdAt: new Date().toISOString(),
+            feedback: `这是一个新的自定义任务：${customTaskName}。尚未有历史记录，但您可以在此处添加相关背景信息。`
+          };
+        }
+        
+        state.generatedPrompt = generatePrompt(
+          state.userProfile,
+          selectedTask,
+          state.userPromptTemplate
+        );
+        
+        elements.promptPreview.textContent = state.generatedPrompt;
+        elements.generatedPrompt.value = state.generatedPrompt;
+      });
+      
+      // 调用 API
+      elements.callApi.addEventListener('click', async () => {
+        // 如果没有生成的 prompt 但有用户数据，尝试先生成 prompt
+        if (!elements.generatedPrompt.value && state.userProfile && state.selectedTask) {
+          state.generatedPrompt = generatePrompt(
+            state.userProfile,
+            state.selectedTask,
+            state.userPromptTemplate
+          );
+          elements.generatedPrompt.value = state.generatedPrompt;
+        }
+        
+        if (!elements.generatedPrompt.value) {
+          alert('请先输入 Prompt 内容');
+          return;
+        }
+        
+        elements.apiLoading.classList.remove('hidden');
+        elements.aiResponse.textContent = '正在请求 DeepSeek API...';
+        
+        try {
+          // 获取当前的 System Prompt 和 API 参数
+          const currentSystemPrompt = elements.systemPrompt.value;
+          const currentUserPrompt = elements.generatedPrompt.value;
+          const currentTemperature = state.temperature;
+          const currentTopP = state.topP;
+          const currentMaxTokens = state.maxTokens;
+          const currentPresencePenalty = state.presencePenalty;
+          
+          const response = await callDeepSeekAPI(
+            currentSystemPrompt,
+            currentUserPrompt,
+            {
+              temperature: currentTemperature,
+              topP: currentTopP,
+              maxTokens: currentMaxTokens,
+              presencePenalty: currentPresencePenalty
+            }
+          );
+          
+          state.aiResponse = response;
+          elements.aiResponse.textContent = state.aiResponse;
+        } catch (error) {
+          console.error('Error:', error);
+          elements.aiResponse.textContent = `Error: ${error.message || 'Unknown error'}`;
+        }
+        
+        elements.apiLoading.classList.add('hidden');
+      });
+    }
+
+    // 启动应用
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html> 
