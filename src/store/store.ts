@@ -20,6 +20,30 @@ interface UserProfile {
   hobbies?: string[];                              // User's hobbies
   goals?: string[];                                // User's personal goals
   notes?: string;                                  // Additional notes
+  
+  // 新增字段 - 工作偏好
+  workStyle?: string[];                            // User's work style preferences
+  productivityPeaks?: string[];                    // User's productivity peak times
+  
+  // 新增字段 - 学习偏好
+  learningPreferences?: string[];                  // User's learning preferences
+  challengeAreas?: string[];                       // User's challenge areas
+  
+  // 新增字段 - 优先级偏好
+  priorityFocus?: {
+    efficiency: number;                            // Importance of efficiency (1-10)
+    quality: number;                               // Importance of quality (1-10)
+    creativity: number;                            // Importance of creativity (1-10)
+  };
+}
+
+/**
+ * Timeline Phase interface - Represents a phase in a task timeline
+ */
+interface TimelinePhase {
+  phase: string;                                   // Phase name
+  duration: string;                                // Duration of the phase
+  description: string;                             // Description of the phase
 }
 
 /**
@@ -39,6 +63,7 @@ interface Task {
   feedback?: {text: string; timestamp: string}[];  // Optional array of feedback entries with timestamps
   subtasks?: Subtask[];                            // Optional array of subtasks
   completedAt?: string;                            // Optional completion date (ISO string format)
+  timeline?: TimelinePhase[];                      // Optional array of timeline phases
 }
 
 /**
@@ -129,13 +154,62 @@ interface AppState {
   
   // UI state
   setSelectedList: (listId: string) => void;       // Change the currently selected list
+  
+  // New actions
+  syncWithServer: () => Promise<boolean>;
+  fetchFromServer: () => Promise<boolean>;
 }
+
+// 创建一个简单的同步函数，用于将状态同步到服务器
+const syncWithServer = async (state: any) => {
+  try {
+    // 使用fetch API将状态发送到服务器
+    const response = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Server responded with status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('State synced with server:', result);
+    return true;
+  } catch (error) {
+    console.error('Failed to sync state with server:', error);
+    return false;
+  }
+};
+
+// 从服务器获取最新状态
+const fetchStateFromServer = async () => {
+  try {
+    const response = await fetch('/api/sync');
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log('No state found on server');
+        return null;
+      }
+      throw new Error(`Server responded with status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('State fetched from server:', result);
+    return result.data;
+  } catch (error) {
+    console.error('Failed to fetch state from server:', error);
+    return null;
+  }
+};
 
 /**
  * Main application store using Zustand
  * Includes persistence to localStorage via the persist middleware
  */
-export const useAppStore = create<AppState>()(
+export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Initial state
@@ -150,7 +224,22 @@ export const useAppStore = create<AppState>()(
         interests: ['AI', 'Programming', 'Reading'],
         hobbies: ['Running', 'Photography', 'Cooking'],
         goals: ['Learn a new language', 'Run a marathon'],
-        notes: ''
+        notes: '',
+        
+        // 新增字段 - 工作偏好
+        workStyle: ['Remote'],
+        productivityPeaks: ['Morning'],
+        
+        // 新增字段 - 学习偏好
+        learningPreferences: ['Online Courses'],
+        challengeAreas: ['Public Speaking'],
+        
+        // 新增字段 - 优先级偏好
+        priorityFocus: {
+          efficiency: 8,
+          quality: 9,
+          creativity: 7
+        }
       },
       tasks: [],
       goals: [],
@@ -420,9 +509,47 @@ export const useAppStore = create<AppState>()(
       // UI state actions
       setSelectedList: (listId) => 
         set({ selectedList: listId }),
+      
+      // 添加一个同步函数
+      syncWithServer: async () => {
+        const state = get();
+        return await syncWithServer(state);
+      },
+      
+      // 添加一个从服务器获取状态的函数
+      fetchFromServer: async () => {
+        const serverState = await fetchStateFromServer();
+        if (serverState) {
+          set(serverState);
+          return true;
+        }
+        return false;
+      },
     }),
     {
-      name: 'nowa-storage', // Name for the localStorage key
+      name: 'nowa-storage',
+      // 添加onRehydrateStorage回调，在恢复状态后尝试从服务器获取最新状态
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          console.log('State rehydrated from localStorage');
+          // 尝试从服务器获取最新状态
+          setTimeout(async () => {
+            try {
+              const serverState = await fetchStateFromServer();
+              if (serverState) {
+                console.log('Updating state from server');
+                // 使用全局store实例更新状态
+                const storeApi = useStore.getState();
+                if (storeApi.fetchFromServer) {
+                  storeApi.fetchFromServer();
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching state from server:', error);
+            }
+          }, 100);
+        }
+      }
     }
   )
 ); 

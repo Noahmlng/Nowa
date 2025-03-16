@@ -49,7 +49,8 @@ async function generateDetailedPlan(
 ): Promise<{ 
   title: string, 
   description: string, 
-  subtasks: { id: string, title: string, completed: boolean }[] 
+  subtasks: { id: string, title: string, completed: boolean }[],
+  timeline?: { phase: string, duration: string, description: string }[]
 }> {
   try {
     // Construct the prompt
@@ -174,13 +175,14 @@ function constructDetailedPlanPrompt(
   prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
   prompt += '\n\n';
   
-  // Add interaction mode with new constraints for Markdown output
+  // Enhanced interaction mode with more structured planning requirements
   prompt += '【交互模式】\n';
   prompt += '▸ 输出格式：使用Markdown格式，包含以下部分：\n';
   prompt += '  1. 方案标题（简短明了）\n';
   prompt += '  2. 方案逻辑（简要说明原理和预期效果）\n';
   prompt += '  3. 注意事项（使用❗标记风险等级）\n';
-  prompt += '  4. 子任务清单（使用Markdown任务列表格式）\n';
+  prompt += '  4. 时间线（提供执行计划的时间线，包括里程碑）\n';
+  prompt += '  5. 子任务清单（使用Markdown任务列表格式）\n';
   prompt += '▸ 语气要求：专业、亲切、激励\n\n';
   
   prompt += `请按以下Markdown格式回复：
@@ -193,6 +195,11 @@ function constructDetailedPlanPrompt(
 ### 注意事项
 - ❗风险提示1
 - ❗❗风险提示2（更高风险）
+
+### 时间线
+1. 第一阶段（X天）：...
+2. 第二阶段（X天）：...
+3. 第三阶段（X天）：...
 
 ### 子任务清单
 - [ ] 子任务1
@@ -215,7 +222,8 @@ function parseDetailedPlan(
 ): { 
   title: string, 
   description: string, 
-  subtasks: { id: string, title: string, completed: boolean }[] 
+  subtasks: { id: string, title: string, completed: boolean }[],
+  timeline?: { phase: string, duration: string, description: string }[]
 } {
   try {
     // Extract title
@@ -240,6 +248,27 @@ function parseDetailedPlan(
       description += '注意事项:\n' + notesMatch[1].trim() + '\n\n';
     }
     
+    // Extract timeline if available
+    const timelineMatch = content.match(/###\s*时间线\s*([\s\S]*?)(?=###|$)/);
+    let timeline: { phase: string, duration: string, description: string }[] = [];
+    
+    if (timelineMatch && timelineMatch[1]) {
+      description += '时间线:\n' + timelineMatch[1].trim() + '\n\n';
+      
+      // Parse timeline into structured data
+      const timelineLines = timelineMatch[1].trim().split('\n');
+      timelineLines.forEach(line => {
+        const phaseMatch = line.match(/(\d+)\.\s*(.*?)（(.*?)）：(.*)/);
+        if (phaseMatch) {
+          timeline.push({
+            phase: phaseMatch[2].trim(),
+            duration: phaseMatch[3].trim(),
+            description: phaseMatch[4].trim()
+          });
+        }
+      });
+    }
+    
     // If no description was extracted, use the selected suggestion
     if (!description) {
       description = selectedSuggestion;
@@ -250,66 +279,47 @@ function parseDetailedPlan(
     const subtasksMatch = content.match(/###\s*子任务清单\s*([\s\S]*?)$/);
     
     if (subtasksMatch && subtasksMatch[1]) {
-      const timestamp = Date.now();
-      const subtaskLines = subtasksMatch[1].split('\n')
-        .map(line => line.trim())
-        .filter(line => line.startsWith('-'))
-        .map(line => line.replace(/^-\s*\[\s*\]\s*/, '').trim());
+      const subtaskLines = subtasksMatch[1].trim().split('\n');
       
-      // Add an ID to each subtask
-      subtasks.push(...subtaskLines.map((title, index) => ({
-        id: `subtask-${timestamp}-${index}`,
-        title, 
-        completed: false
-      })));
-    }
-    
-    // If no subtasks found, extract any list items as subtasks
-    if (subtasks.length === 0) {
-      const timestamp = Date.now();
-      const listItems: string[] = [];
-      const listItemRegex = /^-\s*(.*?)$/gm;
-      let match;
-      
-      while ((match = listItemRegex.exec(content)) !== null) {
-        if (match[1] && match[1].trim()) {
-          listItems.push(match[1].trim());
+      subtaskLines.forEach(line => {
+        // Match Markdown task list format: - [ ] Task description
+        const match = line.match(/[-*]\s*\[\s*\]\s*(.*)/);
+        if (match && match[1]) {
+          subtasks.push({
+            id: `subtask-${Date.now()}-${subtasks.length}`,
+            title: match[1].trim(),
+            completed: false
+          });
         }
-      }
-      
-      if (listItems.length > 0) {
-        subtasks.push(...listItems.map((title, index) => ({
-          id: `subtask-${timestamp}-${index}`,
-          title,
-          completed: false
-        })));
-      }
+      });
     }
     
-    // If still no subtasks found, add default ones
+    // If no subtasks were extracted, create default ones
     if (subtasks.length === 0) {
-      const timestamp = Date.now();
       subtasks.push(
-        { id: `subtask-${timestamp}-1`, title: '准备活动 5 分钟', completed: false },
-        { id: `subtask-${timestamp}-2`, title: '完成主要活动 20 分钟', completed: false },
-        { id: `subtask-${timestamp}-3`, title: '放松和拉伸 5 分钟', completed: false }
+        { id: `subtask-${Date.now()}-1`, title: '准备阶段', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '执行主要任务', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '评估和总结', completed: false }
       );
     }
     
     return {
       title,
       description,
-      subtasks
+      subtasks,
+      timeline: timeline.length > 0 ? timeline : undefined
     };
   } catch (error) {
     console.error('Error parsing detailed plan:', error);
+    
+    // Return fallback plan
     return {
       title: taskTitle,
       description: selectedSuggestion,
       subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '准备活动 5 分钟', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '完成主要活动 20 分钟', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '放松和拉伸 5 分钟', completed: false }
+        { id: `subtask-${Date.now()}-1`, title: '准备阶段', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '执行主要任务', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '评估和总结', completed: false }
       ]
     };
   }

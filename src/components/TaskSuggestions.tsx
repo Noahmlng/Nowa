@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Check, ChevronRight } from 'lucide-react';
-import { useAppStore } from '@/store/store';
+import { X, Check, ChevronRight, Clock } from 'lucide-react';
+import { useStore } from '@/store/store';
 
 interface TaskSuggestionsProps {
   taskId: string;
@@ -16,6 +16,13 @@ interface Subtask {
   completed: boolean;
 }
 
+// New interface for timeline phases
+interface TimelinePhase {
+  phase: string;
+  duration: string;
+  description: string;
+}
+
 /**
  * TaskSuggestions Component
  * 
@@ -23,7 +30,7 @@ interface Subtask {
  * Allows users to select a suggestion and see a detailed plan.
  */
 export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProps) {
-  const { tasks, userProfile, updateTask, addTaskFeedback } = useAppStore();
+  const { tasks, userProfile, updateTask, addTaskFeedback } = useStore();
   
   // Find the target task
   const task = tasks.find(t => t.id === taskId);
@@ -36,6 +43,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
     title: string;
     description: string;
     subtasks: Subtask[];
+    timeline?: TimelinePhase[];
   } | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   
@@ -165,7 +173,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
   const handleApplyPlan = () => {
     if (!task || !detailedPlan) return;
     
-    // Update the task with subtasks and description
+    // Update the task with subtasks, description, and timeline
     updateTask(task.id, {
       description: task.description 
         ? `${task.description}\n\n${detailedPlan.description}`
@@ -173,7 +181,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       subtasks: [
         ...(task.subtasks || []),
         ...detailedPlan.subtasks
-      ]
+      ],
+      timeline: detailedPlan.timeline
     });
     
     // Add feedback record
@@ -248,44 +257,88 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                     <X size={18} />
                   </button>
                 </div>
-                <p className="mt-1 text-sm text-gray-600">{selectedSuggestion}</p>
+                <p className="text-sm text-gray-500 mt-1">基于: {selectedSuggestion}</p>
               </div>
               
               {/* Content */}
-              <div className="flex-1 p-4 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto p-4">
                 {loadingPlan ? (
                   <div className="flex justify-center items-center h-full">
                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
                   </div>
                 ) : detailedPlan ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
+                    {/* Plan Title */}
                     <div>
-                      <h3 className="font-medium text-gray-800">描述</h3>
-                      <p className="mt-1 text-sm text-gray-600">{detailedPlan.description}</p>
+                      <h3 className="text-xl font-medium text-gray-800">{detailedPlan.title}</h3>
                     </div>
                     
-                    <div>
-                      <h3 className="font-medium text-gray-800">子任务</h3>
-                      <ul className="mt-2 space-y-2">
-                        {detailedPlan.subtasks.map((subtask, index) => (
-                          <li key={index} className="flex items-start gap-2 p-2 border border-gray-200 rounded-md">
-                            <div className="flex-shrink-0 pt-0.5">
-                              <div className="h-5 w-5 rounded-full border border-gray-300"></div>
+                    {/* Description */}
+                    <div className="prose prose-sm max-w-none">
+                      <div className="whitespace-pre-wrap text-gray-700">
+                        {detailedPlan.description}
+                      </div>
+                    </div>
+                    
+                    {/* Timeline Section */}
+                    {detailedPlan.timeline && detailedPlan.timeline.length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="text-md font-medium text-gray-800 mb-3 flex items-center">
+                          <Clock size={18} className="mr-2 text-blue-500" />
+                          执行时间线
+                        </h4>
+                        <div className="space-y-3">
+                          {detailedPlan.timeline.map((phase, index) => (
+                            <div 
+                              key={index} 
+                              className="relative pl-8 pb-4 border-l-2 border-blue-200 last:border-l-0 last:pb-0"
+                            >
+                              <div className="absolute left-[-8px] top-0 w-4 h-4 rounded-full bg-blue-500"></div>
+                              <div className="bg-blue-50 rounded-lg p-3">
+                                <div className="flex justify-between items-center mb-1">
+                                  <h5 className="font-medium text-blue-700">{phase.phase}</h5>
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                    {phase.duration}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600">{phase.description}</p>
+                              </div>
                             </div>
-                            <span className="text-sm">{subtask.title}</span>
-                          </li>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Subtasks */}
+                    <div>
+                      <h4 className="text-md font-medium text-gray-800 mb-3">子任务</h4>
+                      <div className="space-y-2">
+                        {detailedPlan.subtasks.map((subtask, index) => (
+                          <div 
+                            key={subtask.id} 
+                            className="flex items-start p-2 rounded-md hover:bg-gray-50"
+                          >
+                            <div className="flex-shrink-0 mt-0.5">
+                              <div className="w-5 h-5 border-2 border-gray-300 rounded-full"></div>
+                            </div>
+                            <div className="ml-3 flex-1">
+                              <p className="text-sm text-gray-700">{subtask.title}</p>
+                            </div>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-center text-gray-500">加载计划详情失败</p>
+                  <div className="flex justify-center items-center h-full">
+                    <p className="text-gray-500">无法加载计划详情</p>
+                  </div>
                 )}
               </div>
               
-              {/* Footer with buttons */}
+              {/* Footer */}
               <div className="border-t border-gray-200 p-4">
-                <div className="flex justify-end gap-3">
+                <div className="flex justify-end space-x-3">
                   <button
                     onClick={handleDecline}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
@@ -294,10 +347,11 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                   </button>
                   <button
                     onClick={handleApplyPlan}
-                    disabled={loadingPlan || !detailedPlan}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300"
+                    disabled={!detailedPlan || loadingPlan}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center"
                   >
-                    应用
+                    <Check size={16} className="mr-1" />
+                    应用计划
                   </button>
                 </div>
               </div>

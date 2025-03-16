@@ -7,7 +7,7 @@ import {
   Star, Sun, ChevronDown, Plus, Trash2, Mic, Send, ListChecks,
   Clock, Check, ChevronRight, Target, Edit2
 } from 'lucide-react';
-import { useAppStore } from '@/store/store';
+import { useStore } from '@/store/store';
 
 /**
  * Task interface - Represents a task in the application
@@ -25,6 +25,7 @@ interface Task {
   taskListId: string;
   feedback?: {text: string; timestamp: string}[]; // Updated feedback structure with timestamps
   subtasks?: Subtask[];
+  timeline?: TimelinePhase[];
 }
 
 /**
@@ -34,6 +35,15 @@ interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+}
+
+/**
+ * Timeline Phase interface for phases in a task timeline
+ */
+interface TimelinePhase {
+  phase: string;
+  duration: string;
+  description: string;
 }
 
 /**
@@ -69,7 +79,7 @@ const useCompletionSound = () => {
  * priority, and associated goal. Also provides feedback functionality.
  */
 export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDetailProps) {
-  const { addTaskFeedback, goals } = useAppStore();
+  const { addTaskFeedback, goals } = useStore();
   const playCompletionSound = useCompletionSound();
   
   // Local state
@@ -603,9 +613,11 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   };
 
   return (
-    <div className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-md bg-white shadow-xl transform transition-transform duration-300 ease-in-out border-l border-gray-200"
-      style={{ transform: isOpen ? 'translateX(0)' : 'translateX(100%)' }}
+    <div 
       ref={detailContainerRef}
+      className={`fixed inset-y-0 right-0 w-full sm:w-96 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${
+        isOpen ? 'translate-x-0' : 'translate-x-full'
+      }`}
     >
       <div className="flex flex-col h-full">
         {/* Header */}
@@ -989,27 +1001,59 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
             </div>
             
             {/* Description */}
-            <div className="mb-6 border-b border-gray-100 pb-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <MessageSquare size={16} className="text-gray-500 mr-2" />
-                任务描述
-              </h3>
+            <div className="px-4 py-3 border-b border-gray-200">
+              <div className="flex justify-between items-start">
+                <h3 className="text-sm font-medium text-gray-700">描述</h3>
+                <button
+                  onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  {isDescriptionExpanded ? '收起' : '展开'}
+                </button>
+              </div>
               <textarea
                 ref={descriptionRef}
-                name="description"
-                rows={isDescriptionExpanded && descriptionLineCount > 6 ? 15 : 6}
-                className="w-full resize-none focus:outline-none text-sm border border-gray-200 rounded-md p-2 transition-all"
-                placeholder="添加描述..."
                 value={editedTask.description || ''}
                 onChange={handleChange}
-                onBlur={() => onUpdate(editedTask)}
-                onFocus={() => {
-                  if (descriptionLineCount > 6) {
-                    setIsDescriptionExpanded(true);
-                  }
-                }}
+                name="description"
+                placeholder="添加描述..."
+                className={`w-full mt-1 p-2 text-sm text-gray-700 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDescriptionExpanded ? '' : 'max-h-24'
+                }`}
+                rows={isDescriptionExpanded ? 8 : 3}
               />
             </div>
+            
+            {/* Timeline Section - New */}
+            {editedTask.timeline && editedTask.timeline.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center">
+                    <Clock size={16} className="mr-2 text-blue-500" />
+                    执行时间线
+                  </h3>
+                </div>
+                <div className="space-y-3 mt-2">
+                  {editedTask.timeline.map((phase, index) => (
+                    <div 
+                      key={index} 
+                      className="relative pl-8 pb-4 border-l-2 border-blue-200 last:border-l-0 last:pb-0"
+                    >
+                      <div className="absolute left-[-8px] top-0 w-4 h-4 rounded-full bg-blue-500"></div>
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <h5 className="font-medium text-blue-700 text-sm">{phase.phase}</h5>
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            {phase.duration}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600">{phase.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Feedback section - Timeline style */}
             <div className="mb-6">
