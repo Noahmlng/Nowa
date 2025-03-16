@@ -6,6 +6,8 @@ import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
+import { generateAITaskProposal } from '@/utils';
+import { runTaskGraphDemo } from '@/utils/TaskTest';
 
 /**
  * Task interface - Represents a task in the application
@@ -271,35 +273,58 @@ export default function TaskList({ filter }: TaskListProps) {
    * Creates a task with the entered title and default values
    */
   const handleAddTask = () => {
-    if (newTaskTitle.trim()) {
-      // Create the new task with default values
-      const newTask: Omit<Task, 'id'> = {
-        title: newTaskTitle,
-        status: 'pending' as const,
-        priority: 'medium' as const,
-        important: false,
-        taskListId: 'inbox',
-      };
+    if (newTaskTitle.trim() === '') return;
+    
+    addTask({
+      title: newTaskTitle,
+      description: '',
+      dueDate: undefined,
+      status: 'pending',
+      priority: 'medium',
+      important: false,
+      taskListId: filter,
+    });
+    
+    setNewTaskTitle('');
+  };
+
+  /**
+   * Handle AI task generation for testing
+   */
+  const handleAITaskGeneration = async () => {
+    try {
+      console.log('Starting AI task generation...');
+      const result = await generateAITaskProposal('Create a comprehensive project plan for Q3');
+      console.log('AI Task Generation Result:', result);
       
-      // Set appropriate attributes based on the current filter
-      if (filter === 'today') {
-        // For My Day view, set due date to today
-        const today = new Date().toISOString().split('T')[0];
-        newTask.dueDate = today;
-        newTask.taskListId = 'today';
-      } else if (filter === 'important') {
-        // For Important view, set important to true
-        newTask.important = true;
-      } else if (filter !== 'all' && filter !== 'completed') {
-        // For custom lists, set the taskListId to the current filter
-        newTask.taskListId = filter;
+      if (result.success && result.task) {
+        // Add the task to the store
+        addTask({
+          title: result.task.title,
+          description: result.task.description || '',
+          dueDate: undefined,
+          status: 'pending',
+          priority: 'medium',
+          important: false,
+          taskListId: filter,
+          subtasks: result.task.subtasks
+        });
       }
-      
-      // Add the task
-      addTask(newTask);
-      
-      // Clear the input field
-      setNewTaskTitle('');
+    } catch (error) {
+      console.error('Error generating AI task:', error);
+    }
+  };
+  
+  /**
+   * Run the task graph system demo
+   */
+  const handleRunDemo = async () => {
+    try {
+      console.log('Starting Task Graph System Demo...');
+      await runTaskGraphDemo();
+      console.log('Demo completed!');
+    } catch (error) {
+      console.error('Error running demo:', error);
     }
   };
 
@@ -460,6 +485,8 @@ export default function TaskList({ filter }: TaskListProps) {
           <button
             className="bg-blue-500 text-white px-3 py-2 rounded-r-md hover:bg-blue-600 transition-colors h-10 flex items-center justify-center"
             onClick={handleAddTask}
+            aria-label="Add task"
+            title="Add task"
           >
             <Plus size={20} />
           </button>
@@ -495,6 +522,8 @@ export default function TaskList({ filter }: TaskListProps) {
                       <button
                         className="flex-shrink-0 mt-0.5"
                         onClick={() => toggleTaskComplete(task.id)}
+                        aria-label={task.status === 'completed' ? "Mark as incomplete" : "Mark as complete"}
+                        title={task.status === 'completed' ? "Mark as incomplete" : "Mark as complete"}
                       >
                         {task.status === 'completed' ? (
                           <CheckCircle className="h-5 w-5 text-blue-500" />
@@ -522,6 +551,8 @@ export default function TaskList({ filter }: TaskListProps) {
                                       handleSaveTaskTitle();
                                     }
                                   }}
+                                  aria-label="Edit task title"
+                                  placeholder="Task title"
                                 />
                               </div>
                             ) : (
@@ -596,6 +627,8 @@ export default function TaskList({ filter }: TaskListProps) {
                                 e.stopPropagation();
                                 deleteTask(task.id);
                               }}
+                              aria-label="Delete task"
+                              title="Delete task"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -628,6 +661,29 @@ export default function TaskList({ filter }: TaskListProps) {
           onUpdate={handleUpdateTask}
         />
       )}
+
+      {/* Task Graph Demo Buttons */}
+      <div className="flex gap-2">
+        <button 
+          onClick={handleAITaskGeneration}
+          className="flex items-center px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          aria-label="Generate AI Task"
+          title="Generate AI Task"
+        >
+          <Zap className="h-4 w-4 mr-1" />
+          AI Task
+        </button>
+        
+        <button 
+          onClick={handleRunDemo}
+          className="flex items-center px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+          aria-label="Run Task Graph Demo"
+          title="Run Task Graph Demo"
+        >
+          <Target className="h-4 w-4 mr-1" />
+          Demo
+        </button>
+      </div>
     </div>
   );
 } 

@@ -1,0 +1,313 @@
+## **当前核心问题 & 关键任务**
+
+### **🌟 1. System Prompt & User Prompt 调优**
+
+**🔹 目标：**
+
+- 确保 **AI 任务方案能充分利用历史任务、用户反馈、任务关联性** 生成更高质量的 3 个方案。
+- 让 **User Prompt 更精准地引导用户提供关键任务信息**，减少用户手动输入。
+- **优化 System Prompt，让 AI 生成的方案结构更清晰**（避免废话，直接 actionable）。
+
+**🛠 当前问题：**
+✅ **System Prompt 还未完全调试，任务历史无法连接，导致 AI 无法参考上下文。**
+
+✅ **User Prompt 结构模糊，导致 AI 产出的方案层次感不足**（过于模板化）。
+
+✅ **AI 方案缺乏针对性，没有动态适配用户历史反馈**。
+
+**🚀 关键 To-Do：**
+
+1. **优化 System Prompt**
+    - 让 AI **读取用户的任务历史（目标、子任务、反馈）**，生成个性化方案。
+    - 确保 AI **优先参考用户的关键反馈信息**（例如：「你上次反馈说这个任务难度高，是否调整？」）。
+    - **调整 System Prompt 结构**：
+        - 让 AI 先生成方案大纲（侧重、目标）
+        - 再基于用户历史补充具体步骤
+2. **优化 User Prompt**
+    - 让用户在输入目标时，AI 逐步补充关键问题：
+        
+        > 💡「这个任务更关注时间效率，还是质量？」
+        > 
+        - 🔹 **[时间效率优先]**
+        - 🔹 **[质量优先]**
+    - **多轮交互优化方案**：
+        - **初次输入时，轻量引导**
+        - **用户调整时，再次 refine**
+        - **用户反馈后，自动优化**
+3. **DeepSeek LLM 关键请求节点**
+    - **用户输入目标后**：AI 轻提示补充关键问题
+    - **生成方案前**：AI 再次 refine 侧重方向
+    - **用户调整方案时**：AI 继续优化
+    - **任务完成后**：AI 预测下次任务执行方式
+
+
+
+
+# AI 任务方案生成系统优化 - 高层设计方案
+
+## 方案一：上下文增强型提示工程架构
+
+**设计概述：**
+构建一个动态提示工程系统，自动从状态管理中提取历史数据并结构化注入到提示中。
+
+**核心组件：**
+1. **上下文构建器 (Context Builder)**
+   - 从Zustand store中提取任务历史、用户反馈、完成情况
+   - 按相关性排序，构建结构化上下文输入
+   - 创建"记忆堆栈"保存重要的用户反馈和模式
+
+2. **动态提示模板系统 (Dynamic Prompt Template)**
+   - 使用模板插槽设计，根据不同任务阶段自动填充
+   - 提供多级提示结构：核心指令(固定) + 上下文数据(动态) + 生成指南(可调)
+
+3. **提示优化反馈循环 (Prompt Refinement Loop)**
+   - 记录每次提示生成的结果和用户反应
+   - 自动学习哪些提示模式更有效
+
+**实现路径：**
+```typescript
+// 上下文构建器
+function buildTaskContext(userId: string, currentTaskTitle: string) {
+  const { tasks, userProfile, feedback } = useAppStore.getState();
+  
+  // 提取相关历史任务
+  const relatedTasks = findRelatedTasks(tasks, currentTaskTitle);
+  
+  // 提取关键用户反馈
+  const keyFeedback = extractKeyFeedback(feedback, relatedTasks);
+  
+  // 构建结构化上下文
+  return structureContext(relatedTasks, keyFeedback, userProfile);
+}
+
+// 动态提示注入
+function createEnhancedSystemPrompt(context: TaskContext) {
+  return `
+    ${CORE_SYSTEM_INSTRUCTIONS}
+    
+    ## 用户历史上下文
+    ${formatUserHistory(context.relatedTasks)}
+    
+    ## 关键反馈记录
+    ${formatKeyFeedback(context.keyFeedback)}
+    
+    ## 用户偏好
+    ${formatUserPreferences(context.userProfile)}
+    
+    ${RESPONSE_STRUCTURE_GUIDE}
+  `;
+}
+```
+
+**为什么有效：**
+- 直接解决了"无法连接任务历史"的问题，通过状态管理自动提取相关数据
+- 结构化的提示模板确保生成内容有清晰层次
+- 反馈循环实现系统持续自我优化
+
+## 方案二：多阶段交互式提示流程
+
+**设计概述：**
+将单一提示拆分为多个阶段，在每个阶段收集特定信息并细化方案。
+
+**核心组件：**
+1. **任务意图分析器 (Task Intent Analyzer)**
+   - 初步分析用户输入，识别任务类型和关键需求
+   - 确定后续提示流程中需要填补的信息缺口
+
+2. **引导式问答流程 (Guided Question Flow)**
+   - 设计固定+动态问题组合
+   - 根据任务类型选择最佳问题路径
+
+3. **增量方案生成器 (Incremental Solution Builder)**
+   - 每次用户输入后增量调整方案
+   - 维护方案版本历史，支持回退和比较
+
+**实现路径：**
+```typescript
+// 初始化交互流程
+function initTaskCreationFlow(initialTaskInput: string) {
+  // 分析初始输入
+  const intentAnalysis = analyzeTaskIntent(initialTaskInput);
+  
+  // 确定问题路径
+  const questionFlow = selectQuestionPath(intentAnalysis.taskType);
+  
+  // 获取首个引导问题
+  return {
+    nextQuestion: questionFlow[0],
+    currentAnalysis: intentAnalysis,
+    solutionDraft: null
+  };
+}
+
+// 处理用户回答并更新流程
+function handleUserAnswer(answer: string, currentState: FlowState) {
+  // 更新任务分析
+  const updatedAnalysis = updateTaskAnalysis(
+    currentState.currentAnalysis, 
+    currentState.nextQuestion,
+    answer
+  );
+  
+  // 更新方案草稿
+  const newSolutionDraft = generateIncrementalSolution(
+    updatedAnalysis,
+    currentState.solutionDraft
+  );
+  
+  // 确定下一个问题
+  const nextQuestion = determineNextQuestion(
+    currentState.questionFlow,
+    updatedAnalysis
+  );
+  
+  return {
+    ...currentState,
+    currentAnalysis: updatedAnalysis,
+    solutionDraft: newSolutionDraft,
+    nextQuestion: nextQuestion
+  };
+}
+```
+
+**为什么有效：**
+- 解决"User Prompt结构模糊"问题，通过明确的问答流程引导用户
+- 增量构建方案，让用户感受到方案如何基于他们的输入演进
+- 减少初次提示的复杂性，通过多轮交互获取更多信息
+
+## 方案三：个性化提示配置系统
+
+**设计概述：**
+建立用户个性化的提示配置系统，记录用户偏好并自动调整提示模式。
+
+**核心组件：**
+1. **用户提示偏好存储 (User Prompt Preferences)**
+   - 存储用户对提示方式的反应数据
+   - 记录历史调整和偏好设置
+
+2. **适应性提示生成器 (Adaptive Prompt Generator)**
+   - 基于用户历史反应动态调整提示强度和详细度
+   - 根据任务类型选择不同提示策略
+
+3. **A/B测试框架 (Prompt A/B Testing)**
+   - 对不同提示变体进行小规模测试
+   - 收集用户反应并优化提示库
+
+**实现路径：**
+```typescript
+// 获取个性化提示配置
+function getPersonalizedPromptConfig(userId: string, taskType: string) {
+  const userProfile = useAppStore.getState().userProfile;
+  const promptHistory = loadUserPromptHistory(userId);
+  
+  // 分析用户偏好
+  const userPreferences = analyzeUserPreferences(userProfile, promptHistory);
+  
+  // 选择最佳提示策略
+  return selectPromptStrategy(userPreferences, taskType);
+}
+
+// 生成个性化系统提示
+function generatePersonalizedSystemPrompt(config: PromptConfig, taskContext: TaskContext) {
+  // 根据配置选择基础模板
+  const baseTemplate = getPromptTemplate(config.templateType);
+  
+  // 应用个性化参数
+  return applyPersonalization(
+    baseTemplate,
+    config.detailLevel,
+    config.tonality,
+    config.focusAreas,
+    taskContext
+  );
+}
+
+// 记录用户反应并更新偏好
+function recordPromptFeedback(userId: string, promptId: string, userReaction: UserReaction) {
+  updatePromptPreferences(userId, promptId, userReaction);
+  
+  // 根据新数据优化提示策略
+  optimizePromptStrategies(userId);
+}
+```
+
+**为什么有效：**
+- 通过学习用户反应模式，逐步优化提示效果
+- 适应不同用户的沟通和工作风格，提高提示相关性
+- 建立数据驱动的提示改进循环，使系统越用越智能
+
+## 方案四：混合多模型协同提示系统
+
+**设计概述：**
+使用多个专门模型分别处理提示的不同方面，然后整合结果。
+
+**核心组件：**
+1. **提示前置处理器 (Prompt Pre-processor)**
+   - 分析原始用户输入
+   - 使用轻量模型进行分类和丰富
+
+2. **多模型路由器 (Multi-model Router)**
+   - 将不同提示任务分配给专门模型:
+     - 历史分析模型：分析用户历史模式
+     - 方案生成模型：创建具体行动方案
+     - 优化模型：精简和结构化输出
+
+3. **结果合成器 (Result Synthesizer)**
+   - 整合多个模型的输出
+   - 消除冲突，创建一致的最终输出
+
+**实现路径：**
+```typescript
+// 多模型提示处理流程
+async function processWithMultiModelSystem(userInput: string, userId: string) {
+  // 1. 预处理输入
+  const enhancedInput = await preprocessUserInput(userInput);
+  
+  // 2. 获取用户历史分析
+  const historyAnalysis = await requestHistoryAnalysis(userId, enhancedInput);
+  
+  // 3. 生成初始方案
+  const rawSolutions = await generateRawSolutions(enhancedInput, historyAnalysis);
+  
+  // 4. 优化并结构化解决方案
+  const refinedSolutions = await refineSolutions(rawSolutions, enhancedInput);
+  
+  // 5. 合成最终结果
+  return synthesizeFinalOutput(historyAnalysis, refinedSolutions);
+}
+
+// 专门的历史分析模型请求
+async function requestHistoryAnalysis(userId: string, taskInput: string) {
+  const userHistory = fetchUserTaskHistory(userId);
+  
+  // 使用小型专门模型进行历史分析
+  return await callDeepSeekAPI({
+    model: "history-analysis-model",
+    systemPrompt: HISTORY_ANALYSIS_PROMPT,
+    userPrompt: formatHistoryAnalysisRequest(userHistory, taskInput)
+  });
+}
+```
+
+**为什么有效：**
+- 通过专门模型处理不同方面，提高各环节质量
+- 可以在不同环节使用成本不同的模型，优化性能和成本
+- 模块化设计使系统各部分可独立优化和测试
+
+## 推荐实施方案
+
+建议采用**方案一（上下文增强型提示工程架构）**作为主要框架，同时整合**方案二（多阶段交互式提示流程）**的问答机制。这种混合方案能够:
+
+1. 充分利用现有的Zustand状态管理系统，直接从store中提取任务历史和用户反馈
+2. 通过结构化提示模板解决方案层次感问题
+3. 引入多阶段交互改善用户输入体验
+4. 保持实现复杂度适中，与现有代码库自然集成
+
+**具体实施步骤：**
+
+1. 开发上下文构建器，从Zustand store提取数据
+2. 设计模块化提示模板系统
+3. 实现简单的多阶段交互流程
+4. 添加基础的提示效果跟踪机制
+
+这种方案能以最小的代码变更实现最大的提示质量提升，同时为未来更高级的个性化和多模型系统奠定基础。

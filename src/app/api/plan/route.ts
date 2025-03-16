@@ -174,33 +174,23 @@ function constructDetailedPlanPrompt(
   prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
   prompt += '\n\n';
   
-  // Add interaction mode with new constraints for Markdown output
-  prompt += '【交互模式】\n';
-  prompt += '▸ 输出格式：使用Markdown格式，包含以下部分：\n';
-  prompt += '  1. 方案标题（简短明了）\n';
-  prompt += '  2. 方案逻辑（简要说明原理和预期效果）\n';
-  prompt += '  3. 注意事项（使用❗标记风险等级）\n';
-  prompt += '  4. 子任务清单（使用Markdown任务列表格式）\n';
-  prompt += '▸ 语气要求：专业、亲切、激励\n\n';
+  // 修改输出要求，使生成的内容更符合app体验
+  prompt += '【输出要求】\n';
+  prompt += '▸ 输出格式：\n';
+  prompt += '1. 标题：简短直接，不超过15字\n';
+  prompt += '2. 描述：最多50字，只提及核心要点和注意事项\n';
+  prompt += '3. 子任务清单：4-6个，每个不超过15字，必须满足以下要求：\n';
+  prompt += '   - 只关注当天的任务执行，不要包含长期计划\n';
+  prompt += '   - 每个子任务都应该简洁明了，像app的选项一样\n';
+  prompt += '   - 不要使用多余的修饰语，直接表达核心动作\n';
+  prompt += '   - 不要包含无关的长期目标(如马拉松训练/语言学习等)，除非与当天任务直接相关\n';
+  prompt += '   - 避免使用"第一周"、"第二周"等长期规划表述\n';
   
-  prompt += `请按以下Markdown格式回复：
-
-## 方案标题
-
-### 方案逻辑
-简要说明方案原理和预期效果...
-
-### 注意事项
-- ❗风险提示1
-- ❗❗风险提示2（更高风险）
-
-### 子任务清单
-- [ ] 子任务1
-- [ ] 子任务2
-- [ ] 子任务3
-...等等
-
-请确保每个子任务都直接明了且可执行，纯文本形式。`;
+  prompt += '▸ 子任务格式范例：\n';
+  prompt += '设置6PM提醒\n';
+  prompt += '准备无糖饮料\n';
+  prompt += '记录饥饿感受\n';
+  prompt += '保持水分摄入\n';
   
   return prompt;
 }
@@ -218,6 +208,8 @@ function parseDetailedPlan(
   subtasks: { id: string, title: string, completed: boolean }[] 
 } {
   try {
+    console.log('[API-Plan] 解析原始内容:', content);
+    
     // Extract title
     let title = taskTitle;
     const titleMatch = content.match(/##\s*(.*?)(?=\n|$)/);
@@ -231,13 +223,14 @@ function parseDetailedPlan(
     // Extract method logic
     const logicMatch = content.match(/###\s*方案逻辑\s*([\s\S]*?)(?=###|$)/);
     if (logicMatch && logicMatch[1]) {
-      description += logicMatch[1].trim() + '\n\n';
+      description += logicMatch[1].trim();
     }
     
     // Extract notes/risks
     const notesMatch = content.match(/###\s*注意事项\s*([\s\S]*?)(?=###|$)/);
     if (notesMatch && notesMatch[1]) {
-      description += '注意事项:\n' + notesMatch[1].trim() + '\n\n';
+      if (description) description += ' ';
+      description += notesMatch[1].trim();
     }
     
     // If no description was extracted, use the selected suggestion
@@ -245,55 +238,53 @@ function parseDetailedPlan(
       description = selectedSuggestion;
     }
     
-    // Extract subtasks
+    // 限制描述长度
+    if (description.length > 100) {
+      description = description.substring(0, 97) + '...';
+    }
+    
+    // Extract subtasks - 简化提取方式，更适合简短的子任务
     const subtasks: { id: string, title: string, completed: boolean }[] = [];
-    const subtasksMatch = content.match(/###\s*子任务清单\s*([\s\S]*?)$/);
+    const subtasksListPattern = /###\s*子任务清单\s*([\s\S]*?)(?=###|$)/;
+    const subtasksMatch = content.match(subtasksListPattern);
     
     if (subtasksMatch && subtasksMatch[1]) {
-      const timestamp = Date.now();
-      const subtaskLines = subtasksMatch[1].split('\n')
+      const subtaskList = subtasksMatch[1].split('\n')
         .map(line => line.trim())
-        .filter(line => line.startsWith('-'))
-        .map(line => line.replace(/^-\s*\[\s*\]\s*/, '').trim());
+        .filter(line => line.length > 0)
+        // 简化子任务内容，移除前缀和一些冗余标记
+        .map(line => line.replace(/^[-*\d\.\[\]]\s*(\[.\])?\s*/, '').trim())
+        .filter(line => line.length > 0 && line.length <= 30);
       
-      // Add an ID to each subtask
-      subtasks.push(...subtaskLines.map((title, index) => ({
-        id: `subtask-${timestamp}-${index}`,
-        title, 
-        completed: false
-      })));
-    }
-    
-    // If no subtasks found, extract any list items as subtasks
-    if (subtasks.length === 0) {
-      const timestamp = Date.now();
-      const listItems: string[] = [];
-      const listItemRegex = /^-\s*(.*?)$/gm;
-      let match;
-      
-      while ((match = listItemRegex.exec(content)) !== null) {
-        if (match[1] && match[1].trim()) {
-          listItems.push(match[1].trim());
-        }
-      }
-      
-      if (listItems.length > 0) {
-        subtasks.push(...listItems.map((title, index) => ({
-          id: `subtask-${timestamp}-${index}`,
-          title,
+      // 只保留4-6个子任务
+      const maxTasks = Math.min(6, subtaskList.length);
+      for (let i = 0; i < maxTasks; i++) {
+        subtasks.push({
+          id: `subtask-${Date.now()}-${i}`,
+          title: subtaskList[i],
           completed: false
-        })));
+        });
       }
     }
     
-    // If still no subtasks found, add default ones
+    console.log('[API-Plan] 提取结果:', { title, description: description.substring(0, 30) + '...', subtasksCount: subtasks.length });
+    
+    // 如果没有提取到子任务，创建基本任务
     if (subtasks.length === 0) {
-      const timestamp = Date.now();
-      subtasks.push(
-        { id: `subtask-${timestamp}-1`, title: '准备活动 5 分钟', completed: false },
-        { id: `subtask-${timestamp}-2`, title: '完成主要活动 20 分钟', completed: false },
-        { id: `subtask-${timestamp}-3`, title: '放松和拉伸 5 分钟', completed: false }
-      );
+      const defaultSubtasks = [
+        '设置6PM提醒',
+        '准备无糖饮料',
+        '记录饥饿感受',
+        '保持水分摄入'
+      ];
+      
+      defaultSubtasks.forEach((task, index) => {
+        subtasks.push({
+          id: `subtask-${Date.now()}-${index}`,
+          title: task,
+          completed: false
+        });
+      });
     }
     
     return {
@@ -302,14 +293,17 @@ function parseDetailedPlan(
       subtasks
     };
   } catch (error) {
-    console.error('Error parsing detailed plan:', error);
+    console.error('[API-Plan] 解析详细计划时出错:', error);
+    
+    // Fallback plan in case of API failure
     return {
       title: taskTitle,
       description: selectedSuggestion,
       subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '准备活动 5 分钟', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '完成主要活动 20 分钟', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '放松和拉伸 5 分钟', completed: false }
+        { id: `subtask-${Date.now()}-1`, title: '设置提醒', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '准备应对策略', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '记录执行情况', completed: false },
+        { id: `subtask-${Date.now()}-4`, title: '调整时间安排', completed: false }
       ]
     };
   }

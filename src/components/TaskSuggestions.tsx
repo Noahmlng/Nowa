@@ -38,6 +38,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
     subtasks: Subtask[];
   } | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [isRequestingPlan, setIsRequestingPlan] = useState(false);
   
   // Load suggestions when component mounts
   useEffect(() => {
@@ -56,8 +57,28 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
     }
     
+    // 标记组件是否已卸载，防止在组件卸载后设置状态
+    let isMounted = true;
+    
+    // 添加一个加载标志，防止重复请求
+    let isLoading = false;
+    
     const loadSuggestions = async () => {
+      // 如果已经在加载中或组件已卸载，直接返回
+      if (isLoading || !isMounted) {
+        return;
+      }
+      
+      // 设置加载标志
+      isLoading = true;
+      
       try {
+        console.log('开始加载任务建议: ', {
+          taskTitle: task.title,
+          userProfile: userProfile,
+          recentFeedback
+        });
+        
         // Call the API route
         const response = await fetch('/api/suggestions', {
           method: 'POST',
@@ -71,34 +92,64 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           })
         });
         
+        console.log('API响应状态: ', response.status, response.statusText);
+        
         if (!response.ok) {
-          throw new Error('Failed to load suggestions');
+          const errorText = await response.text();
+          console.error('API响应错误详情: ', errorText);
+          throw new Error(`加载建议失败: ${response.status} ${response.statusText} - ${errorText}`);
         }
         
         const data = await response.json();
-        setSuggestions(data.suggestions);
+        console.log('获取到的建议: ', data);
+        
+        // 只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setSuggestions(data.suggestions);
+        }
       } catch (error) {
-        console.error('Error loading suggestions:', error);
-        setSuggestions([
-          'Recovery-focused training to address your hip discomfort',
-          'Combined cardio and strength workout targeting core muscles',
-          'Gradual endurance building with low-impact exercises'
-        ]);
+        console.error('加载建议时出错:', error);
+        // 使用回退建议，同样只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setSuggestions([
+            'Recovery-focused training to address your hip discomfort',
+            'Combined cardio and strength workout targeting core muscles',
+            'Gradual endurance building with low-impact exercises'
+          ]);
+        }
       } finally {
-        setLoading(false);
+        // 只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setLoading(false);
+        }
+        // 重置加载标志
+        isLoading = false;
       }
     };
     
     loadSuggestions();
-  }, [task, userProfile]);
+    
+    // 清理函数，在组件卸载时执行
+    return () => {
+      isMounted = false;
+    };
+  }, [task, userProfile]); // 明确列出所有依赖项
   
   // Handle selecting a suggestion
   const handleSelectSuggestion = async (suggestion: string) => {
+    // 如果已经在请求计划，则忽略后续点击
+    if (isRequestingPlan) return;
+    
     setSelectedSuggestion(suggestion);
     setLoadingPlan(true);
+    setIsRequestingPlan(true);
     
     try {
-      if (!task) return;
+      if (!task) {
+        setLoadingPlan(false);
+        setIsRequestingPlan(false);
+        return;
+      }
       
       // Find the most recent feedback if available (same as above)
       let recentFeedback: string | undefined;
@@ -108,6 +159,11 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           task.title.toLowerCase().includes('training')) {
         recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
       }
+      
+      console.log('开始加载详细计划: ', {
+        taskTitle: task.title,
+        selectedSuggestion: suggestion
+      });
       
       // Call the API route
       const response = await fetch('/api/plan', {
@@ -123,14 +179,19 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         })
       });
       
+      console.log('计划API响应状态: ', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to load detailed plan');
+        const errorText = await response.text();
+        console.error('计划API响应错误详情: ', errorText);
+        throw new Error(`加载详细计划失败: ${response.status} ${response.statusText}`);
       }
       
       const plan = await response.json();
+      console.log('获取到的计划: ', plan);
       setDetailedPlan(plan);
     } catch (error) {
-      console.error('Error loading detailed plan:', error);
+      console.error('加载详细计划时出错:', error);
       
       // Create fallback subtasks with proper IDs
       const fallbackSubtasks: Subtask[] = [
@@ -158,6 +219,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       });
     } finally {
       setLoadingPlan(false);
+      setIsRequestingPlan(false);
     }
   };
   
@@ -201,6 +263,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
             <button 
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
+              title="关闭"
+              aria-label="关闭"
             >
               <X size={16} />
             </button>
@@ -244,6 +308,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                   <button 
                     onClick={handleDecline}
                     className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                    title="关闭"
+                    aria-label="关闭"
                   >
                     <X size={18} />
                   </button>

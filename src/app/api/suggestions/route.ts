@@ -39,50 +39,91 @@ async function generateSuggestions(
   try {
     // Construct the prompt
     const prompt = constructSuggestionPrompt(taskTitle, userProfile, recentFeedback);
+    console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
+    
+    // 请求配置
+    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+    console.log('[API-Suggestions] 请求配置:', { 
+      apiUrl, 
+      model, 
+      apiKeyProvided: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0
+    });
     
     // Call DeepSeek API
-    const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions', {
+    const requestBody = {
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      top_p: 0.7,
+      max_tokens: 800,
+      presence_penalty: 0.2
+    };
+    
+    console.log('[API-Suggestions] 发送请求...');
+    const startTime = Date.now();
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        top_p: 0.7,
-        max_tokens: 800,
-        presence_penalty: 0.2
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    const responseTime = Date.now() - startTime;
+    console.log(`[API-Suggestions] 收到响应: 状态=${response.status}, 耗时=${responseTime}ms`);
 
     const data = await response.json();
     
     if (!response.ok) {
-      console.error('Error from DeepSeek API:', data);
-      throw new Error('Failed to generate task suggestions');
+      console.error('[API-Suggestions] DeepSeek API 错误:', data);
+      throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+    }
+
+    console.log('[API-Suggestions] 解析响应数据...');
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('[API-Suggestions] 返回的数据格式不正确:', data);
+      throw new Error('Invalid response format from DeepSeek API');
     }
 
     // Parse the response to extract suggestions
-    return parseSuggestions(data.choices[0].message.content);
+    const suggestions = parseSuggestions(data.choices[0].message.content, taskTitle);
+    console.log('[API-Suggestions] 解析后的建议:', suggestions);
+    
+    return suggestions;
   } catch (error) {
-    console.error('Error generating suggestions:', error);
+    console.error('[API-Suggestions] 生成建议时出错:', error);
     // Fallback suggestions
-    return [
-      '针对髋关节不适的恢复性训练',
-      '结合有氧和力量的核心肌群训练',
-      '低强度渐进式耐力训练'
-    ];
+    return getDefaultSuggestions(taskTitle);
+  }
+}
+
+/**
+ * 获取默认建议选项
+ */
+function getDefaultSuggestions(taskTitle: string): string[] {
+  if (/运动|锻炼|有氧|跑步/.test(taskTitle)) {
+    return ['慢跑', '室内单车', '健身操'];
+  } else if (/饮食|禁食|6pm/.test(taskTitle)) {
+    return ['喝水', '嚼无糖口香糖', '吃蔬菜'];
+  } else if (/学习|读书|复习|写作/.test(taskTitle)) {
+    return ['番茄工作法', '闪卡复习', '思维导图'];
+  } else {
+    return ['方案A', '方案B', '方案C'];
   }
 }
 
@@ -117,6 +158,22 @@ function constructSuggestionPrompt(
     abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
   }
   prompt += abilities.join('、') + '\n';
+  
+  // Add special conditions (health, work, learning, etc.)
+  prompt += '◆ 特殊状况：';
+  if (userProfile.healthConditions && userProfile.healthConditions.length > 0) {
+    prompt += `健康：${userProfile.healthConditions.join('、')}`;
+  }
+  if (userProfile.workConditions && userProfile.workConditions.length > 0) {
+    prompt += `工作：${userProfile.workConditions.join('、')}`;
+  }
+  if (userProfile.learningConditions && userProfile.learningConditions.length > 0) {
+    prompt += `学习：${userProfile.learningConditions.join('、')}`;
+  }
+  if (!userProfile.healthConditions && !userProfile.workConditions && !userProfile.learningConditions) {
+    prompt += '无特殊状况';
+  }
+  prompt += '\n';
   
   // Add historical trajectory
   prompt += '◆ 历史轨迹：';
@@ -153,12 +210,36 @@ function constructSuggestionPrompt(
   prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
   prompt += '\n\n';
   
-  // Add interaction mode with new constraints
-  prompt += '【交互模式】\n';
-  prompt += '▸ 输出格式：提供3个简短建议，每个建议必须以疑问句开头，后跟简短方案\n';
-  prompt += '▸ 语气要求：专业、亲切、激励\n';
-  prompt += '▸ 长度限制：每个建议不超过20个字符\n';
-  prompt += '▸ 输出示例：\n1. 髋关节好些了吗？做恢复训练\n2. 想增强核心吗？尝试平板支撑\n3. 需要放松吗？试试瑜伽拉伸\n';
+  // 修改输出要求，为同一维度下的不同选项
+  prompt += '【输出要求】\n';
+  prompt += '1. 分析任务，确定对这个任务最重要的一个核心维度\n';
+  prompt += '2. 在该维度下，提供三个不同的具体选项\n';
+  prompt += '3. 每个选项必须：\n';
+  prompt += `   - 都与当天任务"${taskTitle}"直接相关\n`;
+  prompt += '   - 长度控制在10字以内\n';
+  prompt += '   - 像app选项一样简洁明了\n';
+  prompt += '   - 避免啰嗦的解释和修饰词\n';
+  prompt += '4. 三个选项应该：\n';
+  prompt += '   - 属于同一维度（如都是运动类型、都是执行方式等）\n';
+  prompt += '   - 互相排他（用户只能选择其中一个）\n';
+  prompt += '   - 考虑用户情况和偏好\n';
+  prompt += '5. 直接输出三行文本，每行一个选项，无需额外解释\n';
+  prompt += '6. 示例输出格式：\n';
+  
+  // 根据任务类型提供适当的示例
+  if (taskTitle.includes('运动') || taskTitle.includes('锻炼') || taskTitle.includes('有氧')) {
+    // 运动类型选项示例
+    prompt += '跳绳\n慢跑\n室内单车\n';
+  } else if (taskTitle.includes('6pm') || taskTitle.includes('饮食') || taskTitle.includes('禁食')) {
+    // 饮食管理方式选项
+    prompt += '喝水缓解饥饿\n嚼无糖口香糖\n准备低热量蔬菜\n';
+  } else if (taskTitle.includes('学习') || taskTitle.includes('读书')) {
+    // 学习方法选项
+    prompt += '番茄工作法\n闪卡记忆\n思维导图\n';
+  } else {
+    // 通用选项
+    prompt += '选项A\n选项B\n选项C\n';
+  }
   
   return prompt;
 }
@@ -166,36 +247,53 @@ function constructSuggestionPrompt(
 /**
  * Parse suggestions from DeepSeek API response
  */
-function parseSuggestions(content: string): string[] {
+function parseSuggestions(content: string, taskTitle: string): string[] {
   try {
-    // Split by newlines and filter out empty lines
+    console.log('[API-Suggestions] 原始内容:', content);
+    
+    // 简化解析，只提取简短的选项
     const lines = content.split('\n')
-      .filter(line => line.trim().length > 0)
-      // Remove any numbering or bullet points at the beginning
-      .map(line => line.replace(/^(\d+\.|\*|\-)\s*/, '').trim())
-      // Ensure each suggestion is not longer than 20 characters
-      .map(line => line.length > 20 ? line.substring(0, 20) : line);
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && line.length <= 12) // 控制长度更严格
+      // 移除任何行首的标记、序号等
+      .map(line => line.replace(/^([0-9]+\.|\*|\-|>|#|【|】)\s*/, ''))
+      .map(line => line.replace(/^\*\*|\*\*$/g, ''))
+      // 过滤掉空行、太短的行、包含标点的行
+      .filter(line => line.length >= 2 && 
+                      !line.includes(':') && 
+                      !line.includes('：') &&
+                      !line.includes('维度') &&
+                      !line.includes('选项') &&
+                      !line.includes('建议'));
     
-    // Ensure we have exactly three suggestions
-    const suggestions = lines.slice(0, 3);
+    console.log('[API-Suggestions] 清理后的行:', lines);
     
-    // If we don't have enough suggestions, add generic ones
+    // 提取最多3个简洁选项
+    const suggestions: string[] = [];
+    for (let i = 0; i < Math.min(3, lines.length); i++) {
+      suggestions.push(lines[i]);
+    }
+    
+    // 补充不足的选项（针对任务类型）
+    const defaultSuggestions = getDefaultSuggestions(taskTitle);
+    
     while (suggestions.length < 3) {
-      const defaultSuggestions = [
-        '需要恢复吗？做轻度训练',
-        '想增强体能吗？核心训练',
-        '关节不适吗？试试拉伸'
-      ];
       suggestions.push(defaultSuggestions[suggestions.length % defaultSuggestions.length]);
     }
     
+    console.log('[API-Suggestions] 最终选项:', suggestions);
     return suggestions;
   } catch (error) {
-    console.error('Error parsing suggestions:', error);
-    return [
-      '需要恢复吗？做轻度训练',
-      '想增强体能吗？核心训练',
-      '关节不适吗？试试拉伸'
-    ];
+    console.error('[API-Suggestions] 解析建议时出错:', error);
+    return getDefaultSuggestions(taskTitle);
   }
+}
+
+/**
+ * Evaluate the relevance of a suggestion to a task
+ */
+function evaluateRelevance(suggestion: string, taskTitle: string): number {
+  // Implementation of relevance evaluation logic
+  // This is a placeholder and should be replaced with actual implementation
+  return 0.8; // Placeholder return, actual implementation needed
 } 
