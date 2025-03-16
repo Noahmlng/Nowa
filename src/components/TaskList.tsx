@@ -2,12 +2,10 @@
 
 import { useState, useRef } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag, Edit2 } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Flag, Edit2, Target, Zap } from 'lucide-react';
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
-import { generateAITaskProposal } from '@/utils';
-import { runTaskGraphDemo } from '@/utils/TaskTest';
 
 /**
  * Task interface - Represents a task in the application
@@ -289,58 +287,6 @@ export default function TaskList({ filter }: TaskListProps) {
   };
 
   /**
-   * Handle AI task generation for testing
-   */
-  const handleAITaskGeneration = async () => {
-    try {
-      console.log('Starting AI task generation...');
-      const result = await generateAITaskProposal('Create a comprehensive project plan for Q3');
-      console.log('AI Task Generation Result:', result);
-      
-      if (result.success && result.task) {
-        // Add the task to the store
-        addTask({
-          title: result.task.title,
-          description: result.task.description || '',
-          dueDate: undefined,
-          status: 'pending',
-          priority: 'medium',
-          important: false,
-          taskListId: filter,
-          subtasks: result.task.subtasks
-        });
-      }
-    } catch (error) {
-      console.error('Error generating AI task:', error);
-    }
-  };
-  
-  /**
-   * Run the task graph system demo
-   */
-  const handleRunDemo = async () => {
-    try {
-      console.log('Starting Task Graph System Demo...');
-      await runTaskGraphDemo();
-      console.log('Demo completed!');
-    } catch (error) {
-      console.error('Error running demo:', error);
-    }
-  };
-
-  /**
-   * Add a task to My Day
-   */
-  const handleAddToMyDay = (taskId: string) => {
-    // Set the task's due date to today and update the taskListId
-    const today = new Date().toISOString().split('T')[0];
-    updateTask(taskId, { 
-      taskListId: 'today',
-      dueDate: today
-    });
-  };
-
-  /**
    * Open the task detail modal for a specific task
    */
   const handleOpenDetail = (task: Task) => {
@@ -467,6 +413,18 @@ export default function TaskList({ filter }: TaskListProps) {
       updateTask(editingTaskId, { title: editingTaskTitle });
       setEditingTaskId(null);
     }
+  };
+
+  /**
+   * Add a task to My Day
+   */
+  const handleAddToMyDay = (taskId: string) => {
+    // Set the task's due date to today and update the taskListId
+    const today = new Date().toISOString().split('T')[0];
+    updateTask(taskId, { 
+      taskListId: 'today',
+      dueDate: today
+    });
   };
 
   return (
@@ -661,29 +619,6 @@ export default function TaskList({ filter }: TaskListProps) {
           onUpdate={handleUpdateTask}
         />
       )}
-
-      {/* Task Graph Demo Buttons */}
-      <div className="flex gap-2">
-        <button 
-          onClick={handleAITaskGeneration}
-          className="flex items-center px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-          aria-label="Generate AI Task"
-          title="Generate AI Task"
-        >
-          <Zap className="h-4 w-4 mr-1" />
-          AI Task
-        </button>
-        
-        <button 
-          onClick={handleRunDemo}
-          className="flex items-center px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-          aria-label="Run Task Graph Demo"
-          title="Run Task Graph Demo"
-        >
-          <Target className="h-4 w-4 mr-1" />
-          Demo
-        </button>
-      </div>
     </div>
   );
 } 
