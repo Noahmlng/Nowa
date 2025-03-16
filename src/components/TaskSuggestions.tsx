@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Check, ChevronRight } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 
@@ -23,7 +23,7 @@ interface Subtask {
  * Allows users to select a suggestion and see a detailed plan.
  */
 export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProps) {
-  const { tasks, userProfile, updateTask, addTaskFeedback } = useAppStore();
+  const { tasks, userProfile, goals, updateTask, addTaskFeedback } = useAppStore();
   
   // Find the target task
   const task = tasks.find(t => t.id === taskId);
@@ -39,6 +39,16 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
   } | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [isRequestingPlan, setIsRequestingPlan] = useState(false);
+  
+  // 获取活跃的目标列表
+  const activeGoals = useMemo(() => {
+    return goals.filter(goal => goal.status === 'active');
+  }, [goals]);
+  
+  // 从活跃目标中提取标题作为隐性需求
+  const implicitNeeds = useMemo(() => {
+    return activeGoals.map(goal => goal.title);
+  }, [activeGoals]);
   
   // Load suggestions when component mounts
   useEffect(() => {
@@ -76,6 +86,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         console.log('开始加载任务建议: ', {
           taskTitle: task.title,
           userProfile: userProfile,
+          implicitNeeds: implicitNeeds,
           recentFeedback
         });
         
@@ -88,6 +99,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           body: JSON.stringify({
             taskTitle: task.title,
             userProfile,
+            implicitNeeds, // 添加从活跃目标获取的隐性需求
             recentFeedback
           })
         });
@@ -133,7 +145,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
     return () => {
       isMounted = false;
     };
-  }, [task, userProfile]); // 明确列出所有依赖项
+  }, [task, userProfile, implicitNeeds]); // 添加implicitNeeds作为依赖项
   
   // Handle selecting a suggestion
   const handleSelectSuggestion = async (suggestion: string) => {
@@ -162,7 +174,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       
       console.log('开始加载详细计划: ', {
         taskTitle: task.title,
-        selectedSuggestion: suggestion
+        selectedSuggestion: suggestion,
+        implicitNeeds: implicitNeeds // 同样传递活跃目标作为隐性需求
       });
       
       // Call the API route
@@ -175,6 +188,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           taskTitle: task.title,
           selectedSuggestion: suggestion,
           userProfile,
+          implicitNeeds, // 添加从活跃目标获取的隐性需求
           recentFeedback
         })
       });

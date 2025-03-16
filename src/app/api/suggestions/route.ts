@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     // Parse request body
-    const { taskTitle, userProfile, recentFeedback } = await request.json();
+    const { taskTitle, userProfile, implicitNeeds, recentFeedback } = await request.json();
     
     if (!taskTitle) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const suggestions = await generateSuggestions(taskTitle, userProfile, recentFeedback);
+    const suggestions = await generateSuggestions(taskTitle, userProfile, implicitNeeds, recentFeedback);
     
     return NextResponse.json({ suggestions });
   } catch (error) {
@@ -34,11 +34,12 @@ export async function POST(request: Request) {
 async function generateSuggestions(
   taskTitle: string,
   userProfile: any,
+  implicitNeeds?: string[],
   recentFeedback?: string
 ): Promise<string[]> {
   try {
     // Construct the prompt
-    const prompt = constructSuggestionPrompt(taskTitle, userProfile, recentFeedback);
+    const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback);
     console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
     
     // 请求配置
@@ -133,6 +134,7 @@ function getDefaultSuggestions(taskTitle: string): string[] {
 function constructSuggestionPrompt(
   taskTitle: string,
   userProfile: any,
+  implicitNeeds?: string[],
   recentFeedback?: string
 ): string {
   let prompt = `请处理任务「${taskTitle}」：\n\n`;
@@ -190,9 +192,12 @@ function constructSuggestionPrompt(
   prompt += '【任务上下文】\n';
   prompt += `★ 显性需求：${taskTitle}\n`;
   
-  // Add implicit needs based on goals
+  // Add implicit needs based on active goals, 使用从前端传来的implicitNeeds
   prompt += '★ 隐性需求：';
-  if (userProfile.goals && userProfile.goals.length > 0) {
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += implicitNeeds.join('、');
+  } else if (userProfile.goals && userProfile.goals.length > 0) {
+    // 如果没有传入implicitNeeds，则使用userProfile.goals作为后备
     prompt += userProfile.goals.join('、');
   } else {
     prompt += '未明确';
@@ -210,7 +215,14 @@ function constructSuggestionPrompt(
   prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
   prompt += '\n\n';
   
-  // 修改输出要求，为同一维度下的不同选项
+  // 添加注意事项，关注当前任务和隐性需求的关系
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += '【注意事项】\n';
+    prompt += `★ 当前任务与用户长期目标的关系：请考虑当前任务"${taskTitle}"如何与用户的隐性需求(${implicitNeeds.join('、')})建立关联。\n`;
+    prompt += '★ 优先考虑最相关的目标：在生成建议时，请优先考虑与当前任务最相关的目标，而不是考虑所有目标。\n\n';
+  }
+  
+  // 修改输出要求为同一维度下的不同选项
   prompt += '【输出要求】\n';
   prompt += '1. 分析任务，确定对这个任务最重要的一个核心维度\n';
   prompt += '2. 在该维度下，提供三个不同的具体选项\n';
@@ -223,6 +235,7 @@ function constructSuggestionPrompt(
   prompt += '   - 属于同一维度（如都是运动类型、都是执行方式等）\n';
   prompt += '   - 互相排他（用户只能选择其中一个）\n';
   prompt += '   - 考虑用户情况和偏好\n';
+  prompt += '   - 可能与用户的隐性需求/长期目标保持一致\n';
   prompt += '5. 直接输出三行文本，每行一个选项，无需额外解释\n';
   prompt += '6. 示例输出格式：\n';
   
