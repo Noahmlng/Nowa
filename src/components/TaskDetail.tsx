@@ -1092,13 +1092,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
             
             {/* Feedback section - Timeline style */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                 <MessageSquare size={16} className="text-gray-500 mr-2" />
                 任务反馈记录
               </h3>
               
               {/* Add feedback - 移到标题下方 */}
-              <div className="flex items-center bg-gray-50 rounded-lg p-1 mb-4">
+              <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 mb-4 shadow-sm">
                 <input
                   type="text"
                   className="flex-1 bg-transparent px-3 py-2 focus:outline-none text-sm"
@@ -1113,7 +1113,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                   }}
                 />
                 <button
-                  className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
                   onClick={handleSubmitFeedback}
                   disabled={!feedback.trim()}
                 >
@@ -1122,7 +1122,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
               </div>
               
               {/* Feedback timeline */}
-              {editedTask.feedback && editedTask.feedback.length > 0 ? (
+              {editedTask.feedback && editedTask.feedback.length > 0 && (
                 <div className="relative pl-6 border-l-2 border-gray-200">
                   {/* Sort feedback by timestamp - newest first */}
                   {[...(editedTask.feedback || [])]
@@ -1132,22 +1132,21 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     })
                     .map((feedbackItem, index) => (
                       <div key={index} className="mb-4 relative">
+                        {/* Circle on timeline */}
+                        <div className="absolute -left-[22px] top-0 w-4 h-4 rounded-full bg-white border-2 border-gray-300"></div>
+                        
                         {/* Feedback timestamp */}
                         <div className="text-xs text-gray-500 mb-1">
                           {feedbackItem.timestamp ? format(new Date(feedbackItem.timestamp), 'yyyy年MM月dd日 HH:mm') : ''}
                         </div>
                         
                         {/* Feedback content */}
-                        <div className="bg-white border border-gray-200 p-3 rounded-md shadow-sm">
+                        <div className="bg-white border border-gray-200 p-3 rounded-md shadow-sm hover:shadow-md transition-shadow">
                           <p className="text-sm text-gray-700">{feedbackItem.text}</p>
                         </div>
                       </div>
                     ))
                   }
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500 italic">
-                  暂无任务反馈
                 </div>
               )}
             </div>
