@@ -240,6 +240,14 @@
       <h2>3. Prompt 生成与测试</h2>
       
       <div class="form-group">
+        <label>提示类型</label>
+        <div style="display: flex; margin-bottom: 1rem;">
+          <button id="suggestionPromptBtn" class="btn btn-primary" style="flex: 1; border-radius: 0.375rem 0 0 0.375rem;">任务建议</button>
+          <button id="detailPlanPromptBtn" class="btn" style="flex: 1; background-color: #e5e7eb; color: #374151; border-radius: 0 0.375rem 0.375rem 0;">详细计划</button>
+        </div>
+      </div>
+      
+      <div class="form-group">
         <label for="systemPrompt">System Prompt</label>
         <textarea id="systemPrompt" rows="8"></textarea>
       </div>
@@ -322,7 +330,64 @@
 【任务上下文】
 ★ 显性需求：{{taskTitle}}
 ★ 隐性需求：{{implicitNeeds}}
-★ 约束条件：{{constraints}}`
+★ 约束条件：{{constraints}}
+
+【输出要求】
+1. 分析任务并确定此任务最重要的核心维度
+2. 在该维度内提供三个不同的具体选项
+3. 每个选项必须：
+   - 与任务"{{taskTitle}}"直接相关
+   - 保持在10个字符以内
+   - 简洁明了，像应用选项一样
+   - 避免冗长的解释和修饰语
+4. 这三个选项应该：
+   - 属于同一维度（例如，所有运动类型、所有执行方法等）
+   - 互斥（用户只能选择一个）
+   - 考虑用户情况和偏好
+   - 可能与用户的隐性需求/长期目标保持一致`,
+      detailPlanSystemPrompt: `你是一个全能型任务管理专家，具备以下能力架构：
+
+【核心角色】  
+1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  
+2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  
+3. **方案架构师**：生成结构化提案  
+
+【跨领域知识库】  
+- 健康管理：运动医学/营养学/康复原理  
+- 学习规划：认知科学/时间管理/知识体系构建  
+- 职业发展：OKR制定/技能迁移策略/行业趋势分析  
+
+【交互协议】  
+1. 提案必须包含：  
+   - 风险评估（使用❗️分级标记）  
+   - 领域交叉建议（如「学习计划与生物钟匹配度」）  
+   - 3种可选路径（保守/平衡/激进策略）  
+2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）`,
+      detailPlanUserPromptTemplate: `请为任务「{{taskTitle}}」创建一个详细计划，采用"{{selectedSuggestion}}"的方法。
+
+【用户画像】
+◆ 基础档案：{{basicInfo}}
+◆ 能力特征：{{abilities}}
+◆ 历史轨迹：{{history}}
+
+【任务上下文】
+★ 显性需求：{{taskTitle}}
+★ 选择的方法：{{selectedSuggestion}}
+★ 隐性需求：{{implicitNeeds}}
+★ 约束条件：{{constraints}}
+
+【输出要求】
+1. 使用Markdown格式编写计划
+2. 包含以下部分：
+   - 概述：计划的简要总结
+   - 步骤：详细的分步说明
+   - 提示：成功执行的有用建议
+   - 预期结果：用户应该达到的目标
+3. 使计划：
+   - 针对所选方法
+   - 根据用户的档案和约束条件量身定制
+   - 现实可行
+   - 在相关情况下支持用户的隐性需求`
     };
 
     // 状态管理
@@ -338,7 +403,9 @@
       topP: 0.7,
       maxTokens: 800,
       presencePenalty: 0.2,
-      aiResponse: ''
+      aiResponse: '',
+      promptType: 'suggestion', // 'suggestion' 或 'detailPlan'
+      selectedSuggestion: '' // 用于详细计划的选定建议
     };
 
     // 模拟数据
@@ -626,7 +693,7 @@
       return tasks;
     }
 
-    function generatePrompt(userProfile, task, promptTemplate) {
+    function generatePrompt(userProfile, task, promptTemplate, selectedSuggestion = '') {
       if (!userProfile || !task) {
         return 'Error: Missing user profile or task data.';
       }
@@ -658,6 +725,11 @@
         .replace('{{constraints}}', userProfile.constraints?.join('、') || '无特殊约束')
         .replace('{{interests}}', userProfile.interests?.join('、') || '无特殊兴趣')
         .replace('{{hobbies}}', userProfile.hobbies?.join('、') || '无特殊爱好');
+      
+      // 如果是详细计划模板，替换选定的建议
+      if (selectedSuggestion) {
+        prompt = prompt.replace('{{selectedSuggestion}}', selectedSuggestion);
+      }
       
       return prompt;
     }
@@ -704,6 +776,48 @@
       // 设置默认值
       elements.systemPrompt.value = state.systemPrompt;
       elements.userPromptTemplate.value = state.userPromptTemplate;
+      
+      // 添加提示类型切换按钮事件
+      const suggestionPromptBtn = document.getElementById('suggestionPromptBtn');
+      const detailPlanPromptBtn = document.getElementById('detailPlanPromptBtn');
+      
+      suggestionPromptBtn.addEventListener('click', () => {
+        state.promptType = 'suggestion';
+        suggestionPromptBtn.className = 'btn btn-primary';
+        suggestionPromptBtn.style.backgroundColor = '';
+        detailPlanPromptBtn.className = 'btn';
+        detailPlanPromptBtn.style.backgroundColor = '#e5e7eb';
+        detailPlanPromptBtn.style.color = '#374151';
+        
+        // 更新 System Prompt 和 User Prompt
+        state.systemPrompt = config.defaultSystemPrompt;
+        state.userPromptTemplate = config.defaultUserPromptTemplate;
+        elements.systemPrompt.value = state.systemPrompt;
+        elements.userPromptTemplate.value = state.userPromptTemplate;
+      });
+      
+      detailPlanPromptBtn.addEventListener('click', () => {
+        state.promptType = 'detailPlan';
+        detailPlanPromptBtn.className = 'btn btn-primary';
+        detailPlanPromptBtn.style.backgroundColor = '';
+        suggestionPromptBtn.className = 'btn';
+        suggestionPromptBtn.style.backgroundColor = '#e5e7eb';
+        suggestionPromptBtn.style.color = '#374151';
+        
+        // 更新 System Prompt 和 User Prompt
+        state.systemPrompt = config.detailPlanSystemPrompt;
+        state.userPromptTemplate = config.detailPlanUserPromptTemplate;
+        elements.systemPrompt.value = state.systemPrompt;
+        elements.userPromptTemplate.value = state.userPromptTemplate;
+        
+        // 提示用户输入选定的建议
+        if (!state.selectedSuggestion) {
+          const suggestion = prompt('请输入选定的建议（用于详细计划生成）：');
+          if (suggestion) {
+            state.selectedSuggestion = suggestion;
+          }
+        }
+      });
       
       // 添加 History 参数测试按钮
       const testHistoryParamButton = document.getElementById('testHistoryParam');
@@ -841,10 +955,22 @@
           };
         }
         
+        // 根据当前的提示类型使用不同的模板
+        if (state.promptType === 'detailPlan' && !state.selectedSuggestion) {
+          const suggestion = prompt('请输入选定的建议（用于详细计划生成）：');
+          if (suggestion) {
+            state.selectedSuggestion = suggestion;
+          } else {
+            alert('详细计划生成需要选定的建议');
+            return;
+          }
+        }
+        
         state.generatedPrompt = generatePrompt(
           state.userProfile,
           selectedTask,
-          state.userPromptTemplate
+          state.userPromptTemplate,
+          state.promptType === 'detailPlan' ? state.selectedSuggestion : ''
         );
         
         elements.promptPreview.textContent = state.generatedPrompt;
@@ -858,7 +984,8 @@
           state.generatedPrompt = generatePrompt(
             state.userProfile,
             state.selectedTask,
-            state.userPromptTemplate
+            state.userPromptTemplate,
+            state.promptType === 'detailPlan' ? state.selectedSuggestion : ''
           );
           elements.generatedPrompt.value = state.generatedPrompt;
         }
@@ -877,7 +1004,8 @@
           const currentUserPrompt = elements.generatedPrompt.value;
           const currentTemperature = state.temperature;
           const currentTopP = state.topP;
-          const currentMaxTokens = state.maxTokens;
+          // 根据提示类型设置不同的 max_tokens 值
+          const currentMaxTokens = state.promptType === 'detailPlan' ? 1500 : state.maxTokens;
           const currentPresencePenalty = state.presencePenalty;
           
           const response = await callDeepSeekAPI(
@@ -893,6 +1021,14 @@
           
           state.aiResponse = response;
           elements.aiResponse.textContent = state.aiResponse;
+          
+          // 解析响应
+          if (state.promptType === 'suggestion') {
+            const suggestions = parseSuggestions(response);
+            if (suggestions.length > 0) {
+              elements.aiResponse.textContent += '\n\n解析出的建议选项：\n' + suggestions.join('\n');
+            }
+          }
         } catch (error) {
           console.error('Error:', error);
           elements.aiResponse.textContent = `Error: ${error.message || 'Unknown error'}`;
@@ -900,6 +1036,47 @@
         
         elements.apiLoading.classList.add('hidden');
       });
+      
+      // 解析建议选项
+      function parseSuggestions(content) {
+        try {
+          // 简化解析，只提取短选项
+          const lines = content.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && line.length <= 20) // 更严格地控制长度
+            // 移除任何行标记、数字等
+            .map(line => line.replace(/^([0-9]+\.|\*|\-|>|#|【|】)\s*/, ''))
+            .map(line => line.replace(/^\*\*|\*\*$/g, ''))
+            // 过滤掉空行、太短的行、带有标点符号的行
+            .filter(line => line.length >= 2 && 
+                            !line.includes(':') && 
+                            !line.includes('：') &&
+                            !line.includes('dimension') &&
+                            !line.includes('options') &&
+                            !line.includes('Option'));
+          
+          // 获取最可能的建议
+          let suggestions = lines.slice(0, 5);
+          
+          // 如果我们有超过3个建议，尝试找到最相关的
+          if (suggestions.length > 3) {
+            // 按与任务标题的相关性排序（简单的词匹配）
+            const taskTitle = state.selectedTask?.title || '';
+            const taskWords = taskTitle.toLowerCase().split(/\s+/);
+            suggestions = suggestions.sort((a, b) => {
+              const aScore = taskWords.filter(word => a.toLowerCase().includes(word)).length;
+              const bScore = taskWords.filter(word => b.toLowerCase().includes(word)).length;
+              return bScore - aScore;
+            });
+          }
+          
+          // 取前3个建议
+          return suggestions.slice(0, 3);
+        } catch (error) {
+          console.error('Error parsing suggestions:', error);
+          return [];
+        }
+      }
     }
 
     // 启动应用
