@@ -20,6 +20,7 @@ interface UserProfile {
   hobbies?: string[];                              // User's hobbies
   goals?: string[];                                // User's personal goals
   notes?: string;                                  // Additional notes
+  userContextHistory?: string;                     // User context history for AI suggestions
   
   // 新增字段 - 工作偏好
   workStyle?: string[];                            // User's work style preferences
@@ -125,6 +126,7 @@ interface AppState {
   // User actions
   updateUser: (user: Partial<User>) => void;       // Update user information
   updateUserProfile: (profile: Partial<UserProfile>) => void; // Update user profile information
+  addToUserContextHistory: (context: string) => void; // Add context to user history
   
   // Task actions
   addTask: (task: Omit<Task, 'id'>) => void;       // Add a new task (ID is generated automatically)
@@ -261,6 +263,27 @@ export const useStore = create<AppState>()(
         userProfile: { ...state.userProfile, ...profileData }
       })),
       
+      // Add user context history function
+      addToUserContextHistory: (context: string) => {
+        set((state) => {
+          const timestamp = new Date().toISOString();
+          const formattedContext = `[${timestamp}] ${context}\n`;
+          
+          // Get existing history or create new
+          const currentHistory = state.userProfile.userContextHistory || '';
+          
+          // Add new context to history
+          const updatedProfile = { 
+            ...state.userProfile, 
+            userContextHistory: currentHistory + formattedContext
+          };
+          
+          console.log('Added to user context history:', formattedContext);
+          
+          return { userProfile: updatedProfile };
+        });
+      },
+      
       // Task actions implementation
       addTask: (task) => 
         set((state) => ({ 
@@ -314,6 +337,10 @@ export const useStore = create<AppState>()(
               timestamp: new Date().toISOString()
             };
           }
+          
+          // Add feedback to user context history
+          const contextUpdate = `[Task Feedback] Task ID: ${id}, Feedback: ${feedbackItem.text}`;
+          get().addToUserContextHistory(contextUpdate);
           
           return { 
             tasks: state.tasks.map(task => 
@@ -553,3 +580,6 @@ export const useStore = create<AppState>()(
     }
   )
 ); 
+
+// Add an alias for useStore as useAppStore for backward compatibility
+export const useAppStore = useStore; 

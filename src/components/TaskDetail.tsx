@@ -7,7 +7,7 @@ import {
   Star, Sun, ChevronDown, Plus, Trash2, Mic, Send, ListChecks,
   Clock, Check, ChevronRight, Target, Edit2
 } from 'lucide-react';
-import { useStore } from '@/store/store';
+import { useAppStore } from '@/store/store';
 
 /**
  * Task interface - Represents a task in the application
@@ -79,7 +79,7 @@ const useCompletionSound = () => {
  * priority, and associated goal. Also provides feedback functionality.
  */
 export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDetailProps) {
-  const { addTaskFeedback, goals } = useStore();
+  const { addTaskFeedback, addToUserContextHistory, goals } = useAppStore();
   const playCompletionSound = useCompletionSound();
   
   // Local state
@@ -277,6 +277,12 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       // Update global state
       addTaskFeedback(task.id, JSON.stringify(newFeedback));
       
+      // Add to user context history
+      if (typeof addToUserContextHistory === 'function') {
+        const contextUpdate = `[Task Feedback] For task "${task.title}": ${feedback.trim()}`;
+        addToUserContextHistory(contextUpdate);
+      }
+      
       // Auto-save when adding feedback
       onUpdate(updatedTask);
     }
@@ -318,6 +324,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
           completedAt: newStatus === 'completed' ? new Date().toISOString() : undefined
         };
         setEditedTask(updatedTask);
+        
+        // Add to user context history
+        if (typeof addToUserContextHistory === 'function') {
+          const contextUpdate = `[Task Completed] Completed task "${updatedTask.title}"`;
+          addToUserContextHistory(contextUpdate);
+        }
+        
         // Auto-save when toggling completion
         onUpdate(updatedTask);
         
@@ -334,6 +347,13 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
         completedAt: undefined
       };
       setEditedTask(updatedTask);
+      
+      // Add to user context history
+      if (typeof addToUserContextHistory === 'function') {
+        const contextUpdate = `[Task Reopened] Reopened task "${updatedTask.title}"`;
+        addToUserContextHistory(contextUpdate);
+      }
+      
       // Auto-save when toggling completion
       onUpdate(updatedTask);
     }
@@ -610,6 +630,21 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       onUpdate(updatedTask);
       setEditingSubtaskId(null);
     }
+  };
+
+  /**
+   * Handle saving changes to the task
+   */
+  const handleSave = () => {
+    // Add to user context history
+    if (typeof addToUserContextHistory === 'function') {
+      const contextUpdate = `[Task Update] Updated task "${editedTask.title}"`;
+      addToUserContextHistory(contextUpdate);
+    }
+    
+    // Update the task
+    onUpdate(editedTask);
+    onClose();
   };
 
   return (

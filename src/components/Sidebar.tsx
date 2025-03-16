@@ -19,7 +19,9 @@ import {
   X,
   Briefcase,
   User,
-  Flag
+  Flag,
+  Download,
+  Save
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import UserProfileModal from './UserProfileModal';
@@ -151,6 +153,79 @@ export default function Sidebar() {
       
       setNewListName(''); // Clear the input
       setIsAddingList(false); // Hide the input form
+    }
+  };
+
+  // Inside the component, add a function to handle saving data
+  const handleSaveToFile = async () => {
+    try {
+      // Get the data from localStorage
+      const storageKey = 'nowa-storage';
+      const storedData = localStorage.getItem(storageKey);
+      
+      if (!storedData) {
+        console.error('No data found in localStorage with key:', storageKey);
+        return;
+      }
+      
+      // Parse the data
+      const parsedData = JSON.parse(storedData);
+      
+      // Create a Blob with the data
+      const blob = new Blob([JSON.stringify(parsedData, null, 2)], { type: 'application/json' });
+      
+      // Create a download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `model-data-${new Date().toISOString().replace(/:/g, '-')}.json`;
+      
+      // Trigger the download
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 0);
+    } catch (error) {
+      console.error('Error saving model data:', error);
+    }
+  };
+
+  const handleSaveToServer = async () => {
+    try {
+      // Get the data from localStorage
+      const storageKey = 'nowa-storage';
+      const storedData = localStorage.getItem(storageKey);
+      
+      if (!storedData) {
+        console.error('No data found in localStorage with key:', storageKey);
+        return;
+      }
+      
+      // Parse the data
+      const parsedData = JSON.parse(storedData);
+      
+      // Send the data to the server
+      const response = await fetch('/api/save-model-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(parsedData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Data saved successfully on the server');
+      } else {
+        console.error('Failed to save data on the server:', result.message);
+      }
+    } catch (error) {
+      console.error('Error saving model data to server:', error);
     }
   };
 
@@ -346,6 +421,21 @@ export default function Sidebar() {
       
       {/* Footer with settings button */}
       <div className="py-3 px-3 border-t border-gray-200">
+        {/* Replace the icon buttons with text buttons in the same row */}
+        <div className="flex justify-between mb-3 text-xs">
+          <button 
+            onClick={handleSaveToServer}
+            className="text-gray-500 hover:text-gray-700 transition-colors" 
+          >
+            备份数据
+          </button>
+          <button 
+            onClick={handleSaveToFile}
+            className="text-gray-500 hover:text-gray-700 transition-colors" 
+          >
+            下载数据
+          </button>
+        </div>
         <button className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
           <Settings size={18} className="text-gray-500" />
           <span className="text-sm">Settings</span>

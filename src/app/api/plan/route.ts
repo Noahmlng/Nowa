@@ -1,326 +1,399 @@
 import { NextResponse } from 'next/server';
 
 /**
- * API Route for generating detailed task plans
+ * API Route for generating task plans
  * POST /api/plan
  */
 export async function POST(request: Request) {
   try {
     // Parse request body
     const { 
+      taskId, 
       taskTitle, 
       selectedSuggestion, 
       userProfile, 
-      recentFeedback 
+      userContextHistory 
     } = await request.json();
     
-    if (!taskTitle || !selectedSuggestion) {
+    if (!taskTitle) {
       return NextResponse.json(
-        { error: 'Task title and selected suggestion are required' },
+        { error: 'Task title is required' },
         { status: 400 }
       );
     }
 
-    const plan = await generateDetailedPlan(
-      taskTitle,
-      selectedSuggestion,
-      userProfile,
-      recentFeedback
+    // Extract implicit needs from user profile and context history
+    const implicitNeeds = extractImplicitNeeds(userProfile, userContextHistory, taskTitle);
+    console.log('[API-Plan] Extracted implicit needs:', implicitNeeds);
+
+    // Extract relevant context from user history
+    let relevantContext = '';
+    if (userContextHistory) {
+      relevantContext = extractRelevantContext(userContextHistory, taskTitle, selectedSuggestion);
+      console.log('[API-Plan] Extracted relevant context length:', relevantContext.length);
+    }
+
+    // Generate plan
+    const plan = await generatePlan(
+      taskId,
+      taskTitle, 
+      selectedSuggestion, 
+      userProfile, 
+      implicitNeeds,
+      relevantContext
     );
     
-    return NextResponse.json(plan);
+    return NextResponse.json({ plan });
   } catch (error) {
-    console.error('Error generating detailed plan:', error);
+    console.error('[API-Plan] Error generating plan:', error);
     return NextResponse.json(
-      { error: 'Failed to generate detailed plan' },
+      { error: 'Failed to generate plan' },
       { status: 500 }
     );
   }
 }
 
 /**
- * Generate detailed task plan based on user selection
+ * Extract implicit needs from user profile and context history
  */
-async function generateDetailedPlan(
+function extractImplicitNeeds(
+  userProfile: any, 
+  userContextHistory?: string,
+  taskTitle?: string
+): string[] {
+  const implicitNeeds: string[] = [];
+  
+  // Extract from user goals
+  if (userProfile.goals && Array.isArray(userProfile.goals)) {
+    implicitNeeds.push(...userProfile.goals);
+  }
+  
+  // Extract from user context history if available
+  if (userContextHistory && userContextHistory.length > 0 && taskTitle) {
+    // Simple keyword-based extraction
+    const entries = userContextHistory.split('\n').filter(entry => entry.trim().length > 0);
+    
+    // Keywords from task title
+    const taskKeywords = taskTitle.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    
+    // Find entries that might contain implicit needs
+    const relevantEntries = entries.filter(entry => {
+      const lowerEntry = entry.toLowerCase();
+      // Check if entry contains any task keywords
+      return taskKeywords.some(keyword => lowerEntry.includes(keyword));
+    });
+    
+    // Extract potential needs from relevant entries
+    const needsRegexPatterns = [
+      /\[Goal\]:\s*(.+?)(?=\n|$)/i,
+      /want(?:s|ed)? to\s+(.+?)(?=\.|,|\n|$)/i,
+      /need(?:s|ed)? to\s+(.+?)(?=\.|,|\n|$)/i,
+      /trying to\s+(.+?)(?=\.|,|\n|$)/i,
+      /aim(?:s|ed)? to\s+(.+?)(?=\.|,|\n|$)/i,
+      /hope(?:s|d)? to\s+(.+?)(?=\.|,|\n|$)/i
+    ];
+    
+    relevantEntries.forEach(entry => {
+      needsRegexPatterns.forEach(pattern => {
+        const match = entry.match(pattern);
+        if (match && match[1]) {
+          const need = match[1].trim();
+          if (need.length > 0 && need.length < 100) { // Reasonable length check
+            implicitNeeds.push(need);
+          }
+        }
+      });
+    });
+  }
+  
+  // Remove duplicates and limit to top 5
+  return [...new Set(implicitNeeds)].slice(0, 5);
+}
+
+/**
+ * Extract relevant context from user history
+ */
+function extractRelevantContext(
+  userContextHistory: string, 
+  taskTitle: string, 
+  selectedSuggestion: string = '',
+  maxChars = 1000
+): string {
+  if (!userContextHistory || userContextHistory.length === 0) {
+    return '';
+  }
+  
+  // Split history into individual entries
+  const entries = userContextHistory.split('\n').filter(entry => entry.trim().length > 0);
+  if (entries.length === 0) {
+    return '';
+  }
+  
+  // Simple implementation: select entries containing keywords
+  const keywordsSet = new Set<string>([
+    ...taskTitle.toLowerCase().split(/\s+/),
+    ...(selectedSuggestion ? selectedSuggestion.toLowerCase().split(/\s+/) : [])
+  ]);
+  const keywords = Array.from(keywordsSet).filter(word => word.length > 3); // Only use longer words as keywords
+  
+  // Score each entry based on the number of keywords it contains
+  const scoredEntries = entries.map(entry => {
+    const lowerEntry = entry.toLowerCase();
+    // Calculate score: number of keywords found + newer entries score higher
+    let score = 0;
+    keywords.forEach(word => {
+      if (lowerEntry.includes(word)) {
+        score += 1;
+      }
+    });
+    
+    // Specific types of entries get bonus points
+    if (entry.includes('[Task Feedback]')) score += 2;
+    if (entry.includes('[Task Update]')) score += 1;
+    if (entry.includes('[New Task]')) score += 1;
+    
+    return { entry, score };
+  });
+  
+  // Sort by score and keep the most relevant entries
+  scoredEntries.sort((a, b) => b.score - a.score);
+  
+  // Combine the most relevant entries until reaching the maximum character count
+  let relevantContext = '';
+  for (const { entry } of scoredEntries) {
+    if (relevantContext.length + entry.length + 1 > maxChars) {
+      break;
+    }
+    relevantContext += entry + '\n';
+  }
+  
+  return relevantContext;
+}
+
+/**
+ * Generate task plan using DeepSeek API
+ */
+async function generatePlan(
+  taskId: string,
   taskTitle: string,
   selectedSuggestion: string,
   userProfile: any,
-  recentFeedback?: string
-): Promise<{ 
-  title: string, 
-  description: string, 
-  subtasks: { id: string, title: string, completed: boolean }[],
-  timeline?: { phase: string, duration: string, description: string }[]
-}> {
+  implicitNeeds: string[],
+  relevantContext: string
+): Promise<string> {
   try {
     // Construct the prompt
-    const prompt = constructDetailedPlanPrompt(taskTitle, selectedSuggestion, userProfile, recentFeedback);
+    const prompt = constructPlanPrompt(
+      taskId, 
+      taskTitle, 
+      selectedSuggestion, 
+      userProfile, 
+      implicitNeeds,
+      relevantContext
+    );
+    console.log('[API-Plan] Constructed prompt:', prompt.substring(0, 200) + '...');
+    
+    // Request configuration
+    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+    console.log('[API-Plan] Request configuration:', { 
+      apiUrl, 
+      model, 
+      apiKeyProvided: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0
+    });
     
     // Call DeepSeek API
-    const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions', {
+    const requestBody = {
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a comprehensive task management expert with the following capabilities:\n\n【Core Roles】  \n1. **Domain Identifier**: Automatically determine task type (health/learning/career etc.)  \n2. **Risk Auditor**: Detect potential contradictions/danger signals in user input  \n3. **Solution Architect**: Generate structured proposals  \n\n【Cross-domain Knowledge Base】  \n- Health Management: Sports Medicine/Nutrition/Rehabilitation Principles  \n- Learning Planning: Cognitive Science/Time Management/Knowledge System Construction  \n- Career Development: OKR Formulation/Skill Transfer Strategy/Industry Trend Analysis  \n\n【Interaction Protocol】  \n1. Proposals must include:  \n   - Risk assessment (marked with ❗️ grading)  \n   - Cross-domain suggestions (such as "Learning plan and biological clock compatibility")  \n   - 3 optional paths (conservative/balanced/aggressive strategies)  \n2. Use analogies to explain professional concepts (such as "This learning plan is like a pyramid, the foundation layer is...")'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      top_p: 0.7,
+      max_tokens: 1500,
+      presence_penalty: 0.2
+    };
+    
+    console.log('[API-Plan] Sending request...');
+    const startTime = Date.now();
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.8,
-        top_p: 0.7,
-        max_tokens: 1000,
-        presence_penalty: 0.2
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    const responseTime = Date.now() - startTime;
+    console.log(`[API-Plan] Received response: status=${response.status}, time=${responseTime}ms`);
 
     const data = await response.json();
     
     if (!response.ok) {
-      console.error('Error from DeepSeek API:', data);
-      throw new Error('Failed to generate detailed plan');
+      console.error('[API-Plan] DeepSeek API error:', data);
+      throw new Error(`Failed to generate task plan: ${response.status} ${response.statusText}`);
     }
 
-    // Parse the response to extract the detailed plan
-    return parseDetailedPlan(data.choices[0].message.content, taskTitle, selectedSuggestion);
+    console.log('[API-Plan] Parsing response data...');
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('[API-Plan] Invalid response format:', data);
+      throw new Error('Invalid response format from DeepSeek API');
+    }
+
+    // Return the generated plan
+    return data.choices[0].message.content;
   } catch (error) {
-    console.error('Error generating detailed plan:', error);
-    
-    // Fallback plan in case of API failure
-    return {
-      title: taskTitle,
-      description: `${selectedSuggestion}\n\n根据您的偏好和目标生成的计划。`,
-      subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '热身 5 分钟', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '完成主要活动（20 分钟）', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '放松和拉伸（5 分钟）', completed: false }
-      ]
-    };
+    console.error('[API-Plan] Error generating plan:', error);
+    // Fallback plan
+    return getDefaultPlan(taskTitle, selectedSuggestion);
   }
 }
 
 /**
- * Construct prompt for generating detailed plan
+ * Get default plan when API fails
  */
-function constructDetailedPlanPrompt(
+function getDefaultPlan(taskTitle: string, selectedSuggestion: string): string {
+  return `# Plan for: ${taskTitle} (${selectedSuggestion})
+
+## Overview
+This is a default plan generated because the AI service was unavailable.
+
+## Steps
+1. Start with the basics
+2. Progress gradually
+3. Monitor your progress
+
+## Tips
+- Take breaks when needed
+- Stay consistent
+- Adjust as necessary
+
+## Expected Outcome
+Successful completion of your task: ${taskTitle}`;
+}
+
+/**
+ * Construct prompt for generating task plan
+ */
+function constructPlanPrompt(
+  taskId: string,
   taskTitle: string,
   selectedSuggestion: string,
   userProfile: any,
-  recentFeedback?: string
+  implicitNeeds: string[],
+  relevantContext: string
 ): string {
-  let prompt = `请处理任务「${taskTitle}」，基于所选方案：「${selectedSuggestion}」\n\n`;
+  let prompt = `Please create a detailed plan for the task "${taskTitle}" with the selected approach "${selectedSuggestion}".\n\n`;
+  
+  // Add task ID for reference
+  prompt += `Task ID: ${taskId}\n\n`;
   
   // Add user profile information
-  prompt += '【用户画像】\n';
-  prompt += '◆ 基础档案：';
+  prompt += '【User Profile】\n';
+  prompt += '◆ Basic Information:';
   const basicInfo = [];
-  if (userProfile.age) basicInfo.push(`年龄 ${userProfile.age}`);
-  if (userProfile.occupation) basicInfo.push(`职业 ${userProfile.occupation}`);
-  if (userProfile.location) basicInfo.push(`地理位置 ${userProfile.location}`);
-  if (userProfile.height) basicInfo.push(`身高 ${userProfile.height}`);
-  if (userProfile.weight) basicInfo.push(`体重 ${userProfile.weight}`);
-  prompt += basicInfo.join('、') + '\n';
+  if (userProfile.age) basicInfo.push(`Age ${userProfile.age}`);
+  if (userProfile.occupation) basicInfo.push(`Occupation ${userProfile.occupation}`);
+  if (userProfile.location) basicInfo.push(`Location ${userProfile.location}`);
+  if (userProfile.height) basicInfo.push(`Height ${userProfile.height}`);
+  if (userProfile.weight) basicInfo.push(`Weight ${userProfile.weight}`);
+  prompt += basicInfo.join(', ') + '\n';
   
   // Add ability characteristics
-  prompt += '◆ 能力特征：';
+  prompt += '◆ Ability Characteristics:';
   const abilities = [];
   if (userProfile.strengths && userProfile.strengths.length > 0) {
-    abilities.push(`优势 ${userProfile.strengths.join('、')}`);
+    abilities.push(`Strengths: ${userProfile.strengths.join(', ')}`);
   }
   if (userProfile.weaknesses && userProfile.weaknesses.length > 0) {
-    abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
+    abilities.push(`Weaknesses: ${userProfile.weaknesses.join(', ')}`);
   }
-  prompt += abilities.join('、') + '\n';
+  prompt += abilities.join(', ') + '\n';
+  
+  // Add special conditions (health, work, learning, etc.)
+  prompt += '◆ Special Conditions:';
+  if (userProfile.healthConditions && userProfile.healthConditions.length > 0) {
+    prompt += `Health: ${userProfile.healthConditions.join(', ')}`;
+  }
+  if (userProfile.workConditions && userProfile.workConditions.length > 0) {
+    prompt += `Work: ${userProfile.workConditions.join(', ')}`;
+  }
+  if (userProfile.learningConditions && userProfile.learningConditions.length > 0) {
+    prompt += `Learning: ${userProfile.learningConditions.join(', ')}`;
+  }
+  if (!userProfile.healthConditions && !userProfile.workConditions && !userProfile.learningConditions) {
+    prompt += 'No special conditions';
+  }
+  prompt += '\n';
   
   // Add historical trajectory
-  prompt += '◆ 历史轨迹：';
+  prompt += '◆ Historical Trajectory:';
   if (userProfile.history) {
     prompt += userProfile.history;
-  } else if (recentFeedback) {
-    prompt += recentFeedback;
   } else {
-    prompt += '无历史记录';
+    prompt += 'No history';
   }
   prompt += '\n\n';
   
   // Add task context
-  prompt += '【任务上下文】\n';
-  prompt += `★ 显性需求：${taskTitle}\n`;
+  prompt += '【Task Context】\n';
+  prompt += `★ Explicit Need: ${taskTitle}\n`;
+  prompt += `★ Selected Approach: ${selectedSuggestion}\n`;
   
-  // Add implicit needs based on goals
-  prompt += '★ 隐性需求：';
-  if (userProfile.goals && userProfile.goals.length > 0) {
-    prompt += userProfile.goals.join('、');
+  // Add implicit needs
+  prompt += '★ Implicit Needs:';
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += implicitNeeds.join(', ');
+  } else if (userProfile.goals && userProfile.goals.length > 0) {
+    // If implicitNeeds not provided, use userProfile.goals as backup
+    prompt += userProfile.goals.join(', ');
   } else {
-    prompt += '未明确';
+    prompt += 'Not specified';
   }
   prompt += '\n';
   
   // Add constraints
-  prompt += '★ 约束条件：';
+  prompt += '★ Constraints:';
   const constraints = [];
-  if (userProfile.timeConstraints) constraints.push(`时间 ${userProfile.timeConstraints}`);
-  if (userProfile.resourceConstraints) constraints.push(`资源 ${userProfile.resourceConstraints}`);
+  if (userProfile.timeConstraints) constraints.push(`Time ${userProfile.timeConstraints}`);
+  if (userProfile.resourceConstraints) constraints.push(`Resources ${userProfile.resourceConstraints}`);
   if (userProfile.restrictions && userProfile.restrictions.length > 0) {
-    constraints.push(`限制 ${userProfile.restrictions.join('、')}`);
+    constraints.push(`Restrictions ${userProfile.restrictions.join(', ')}`);
   }
-  prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
+  prompt += constraints.length > 0 ? constraints.join(', ') : 'No explicit constraints';
   prompt += '\n\n';
   
-  // Enhanced interaction mode with more structured planning requirements
-  prompt += '【交互模式】\n';
-  prompt += '▸ 输出格式：使用Markdown格式，包含以下部分：\n';
-  prompt += '  1. 方案标题（简短明了）\n';
-  prompt += '  2. 方案逻辑（简要说明原理和预期效果）\n';
-  prompt += '  3. 注意事项（使用❗标记风险等级）\n';
-  prompt += '  4. 时间线（提供执行计划的时间线，包括里程碑）\n';
-  prompt += '  5. 子任务清单（使用Markdown任务列表格式）\n';
-  prompt += '▸ 语气要求：专业、亲切、激励\n\n';
+  // Add relevant user context history (if available)
+  if (relevantContext && relevantContext.length > 0) {
+    prompt += '【User Context History】\n';
+    prompt += relevantContext + '\n\n';
+  }
   
-  prompt += `请按以下Markdown格式回复：
-
-## 方案标题
-
-### 方案逻辑
-简要说明方案原理和预期效果...
-
-### 注意事项
-- ❗风险提示1
-- ❗❗风险提示2（更高风险）
-
-### 时间线
-1. 第一阶段（X天）：...
-2. 第二阶段（X天）：...
-3. 第三阶段（X天）：...
-
-### 子任务清单
-- [ ] 子任务1
-- [ ] 子任务2
-- [ ] 子任务3
-...等等
-
-请确保每个子任务都直接明了且可执行，纯文本形式。`;
+  // Output requirements
+  prompt += '【Output Requirements】\n';
+  prompt += '1. Format the plan in Markdown\n';
+  prompt += '2. Include the following sections:\n';
+  prompt += '   - Overview: Brief summary of the plan\n';
+  prompt += '   - Steps: Detailed step-by-step instructions\n';
+  prompt += '   - Tips: Helpful advice for successful execution\n';
+  prompt += '   - Expected Outcome: What the user should achieve\n';
+  prompt += '3. Make the plan:\n';
+  prompt += '   - Specific to the selected approach\n';
+  prompt += '   - Tailored to the user\'s profile and constraints\n';
+  prompt += '   - Realistic and actionable\n';
+  prompt += '   - Supportive of the user\'s implicit needs where relevant\n';
   
   return prompt;
-}
-
-/**
- * Parse detailed plan from DeepSeek API response
- */
-function parseDetailedPlan(
-  content: string, 
-  taskTitle: string, 
-  selectedSuggestion: string
-): { 
-  title: string, 
-  description: string, 
-  subtasks: { id: string, title: string, completed: boolean }[],
-  timeline?: { phase: string, duration: string, description: string }[]
-} {
-  try {
-    // Extract title
-    let title = taskTitle;
-    const titleMatch = content.match(/##\s*(.*?)(?=\n|$)/);
-    if (titleMatch && titleMatch[1]) {
-      title = titleMatch[1].trim();
-    }
-    
-    // Extract description (including method logic and notes)
-    let description = '';
-    
-    // Extract method logic
-    const logicMatch = content.match(/###\s*方案逻辑\s*([\s\S]*?)(?=###|$)/);
-    if (logicMatch && logicMatch[1]) {
-      description += logicMatch[1].trim() + '\n\n';
-    }
-    
-    // Extract notes/risks
-    const notesMatch = content.match(/###\s*注意事项\s*([\s\S]*?)(?=###|$)/);
-    if (notesMatch && notesMatch[1]) {
-      description += '注意事项:\n' + notesMatch[1].trim() + '\n\n';
-    }
-    
-    // Extract timeline if available
-    const timelineMatch = content.match(/###\s*时间线\s*([\s\S]*?)(?=###|$)/);
-    let timeline: { phase: string, duration: string, description: string }[] = [];
-    
-    if (timelineMatch && timelineMatch[1]) {
-      description += '时间线:\n' + timelineMatch[1].trim() + '\n\n';
-      
-      // Parse timeline into structured data
-      const timelineLines = timelineMatch[1].trim().split('\n');
-      timelineLines.forEach(line => {
-        const phaseMatch = line.match(/(\d+)\.\s*(.*?)（(.*?)）：(.*)/);
-        if (phaseMatch) {
-          timeline.push({
-            phase: phaseMatch[2].trim(),
-            duration: phaseMatch[3].trim(),
-            description: phaseMatch[4].trim()
-          });
-        }
-      });
-    }
-    
-    // If no description was extracted, use the selected suggestion
-    if (!description) {
-      description = selectedSuggestion;
-    }
-    
-    // Extract subtasks
-    const subtasks: { id: string, title: string, completed: boolean }[] = [];
-    const subtasksMatch = content.match(/###\s*子任务清单\s*([\s\S]*?)$/);
-    
-    if (subtasksMatch && subtasksMatch[1]) {
-      const subtaskLines = subtasksMatch[1].trim().split('\n');
-      
-      subtaskLines.forEach(line => {
-        // Match Markdown task list format: - [ ] Task description
-        const match = line.match(/[-*]\s*\[\s*\]\s*(.*)/);
-        if (match && match[1]) {
-          subtasks.push({
-            id: `subtask-${Date.now()}-${subtasks.length}`,
-            title: match[1].trim(),
-            completed: false
-          });
-        }
-      });
-    }
-    
-    // If no subtasks were extracted, create default ones
-    if (subtasks.length === 0) {
-      subtasks.push(
-        { id: `subtask-${Date.now()}-1`, title: '准备阶段', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '执行主要任务', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '评估和总结', completed: false }
-      );
-    }
-    
-    return {
-      title,
-      description,
-      subtasks,
-      timeline: timeline.length > 0 ? timeline : undefined
-    };
-  } catch (error) {
-    console.error('Error parsing detailed plan:', error);
-    
-    // Return fallback plan
-    return {
-      title: taskTitle,
-      description: selectedSuggestion,
-      subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '准备阶段', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '执行主要任务', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '评估和总结', completed: false }
-      ]
-    };
-  }
 } 

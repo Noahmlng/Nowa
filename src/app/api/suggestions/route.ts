@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     // Parse request body
-    const { taskTitle, userProfile, recentFeedback } = await request.json();
+    const { taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory } = await request.json();
     
     if (!taskTitle) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const suggestions = await generateSuggestions(taskTitle, userProfile, recentFeedback);
+    const suggestions = await generateSuggestions(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
     
     return NextResponse.json({ suggestions });
   } catch (error) {
@@ -34,55 +34,98 @@ export async function POST(request: Request) {
 async function generateSuggestions(
   taskTitle: string,
   userProfile: any,
-  recentFeedback?: string
+  implicitNeeds?: string[],
+  recentFeedback?: string,
+  userContextHistory?: string
 ): Promise<string[]> {
   try {
     // Construct the prompt
-    const prompt = constructSuggestionPrompt(taskTitle, userProfile, recentFeedback);
+    const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
+    console.log('[API-Suggestions] Constructed prompt:', prompt.substring(0, 200) + '...');
+    
+    // Request configuration
+    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+    console.log('[API-Suggestions] Request configuration:', { 
+      apiUrl, 
+      model, 
+      apiKeyProvided: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0
+    });
     
     // Call DeepSeek API
-    const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions', {
+    const requestBody = {
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a comprehensive task management expert with the following capabilities:\n\n【Core Roles】  \n1. **Domain Identifier**: Automatically determine task type (health/learning/career etc.)  \n2. **Risk Auditor**: Detect potential contradictions/danger signals in user input  \n3. **Solution Architect**: Generate structured proposals  \n\n【Cross-domain Knowledge Base】  \n- Health Management: Sports Medicine/Nutrition/Rehabilitation Principles  \n- Learning Planning: Cognitive Science/Time Management/Knowledge System Construction  \n- Career Development: OKR Formulation/Skill Transfer Strategy/Industry Trend Analysis  \n\n【Interaction Protocol】  \n1. Proposals must include:  \n   - Risk assessment (marked with ❗️ grading)  \n   - Cross-domain suggestions (such as "Learning plan and biological clock compatibility")  \n   - 3 optional paths (conservative/balanced/aggressive strategies)  \n2. Use analogies to explain professional concepts (such as "This learning plan is like a pyramid, the foundation layer is...")'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      top_p: 0.7,
+      max_tokens: 800,
+      presence_penalty: 0.2
+    };
+    
+    console.log('[API-Suggestions] Sending request...');
+    const startTime = Date.now();
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        top_p: 0.7,
-        max_tokens: 800,
-        presence_penalty: 0.2
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    const responseTime = Date.now() - startTime;
+    console.log(`[API-Suggestions] Received response: status=${response.status}, time=${responseTime}ms`);
 
     const data = await response.json();
     
     if (!response.ok) {
-      console.error('Error from DeepSeek API:', data);
-      throw new Error('Failed to generate task suggestions');
+      console.error('[API-Suggestions] DeepSeek API error:', data);
+      throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+    }
+
+    console.log('[API-Suggestions] Parsing response data...');
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('[API-Suggestions] Invalid response format:', data);
+      throw new Error('Invalid response format from DeepSeek API');
     }
 
     // Parse the response to extract suggestions
-    return parseSuggestions(data.choices[0].message.content);
+    const suggestions = parseSuggestions(data.choices[0].message.content, taskTitle);
+    console.log('[API-Suggestions] Parsed suggestions:', suggestions);
+    
+    return suggestions;
   } catch (error) {
-    console.error('Error generating suggestions:', error);
+    console.error('[API-Suggestions] Error generating suggestions:', error);
     // Fallback suggestions
-    return [
-      '针对髋关节不适的恢复性训练',
-      '结合有氧和力量的核心肌群训练',
-      '低强度渐进式耐力训练'
-    ];
+    return getDefaultSuggestions(taskTitle);
+  }
+}
+
+/**
+ * Get default suggestions
+ */
+function getDefaultSuggestions(taskTitle: string): string[] {
+  if (/exercise|workout|run|training/i.test(taskTitle)) {
+    return ['Slow jogging', 'Indoor cycling', 'Fitness routine'];
+  } else if (/diet|fasting|6pm/i.test(taskTitle)) {
+    return ['Drink water', 'Chew sugar-free gum', 'Eat vegetables'];
+  } else if (/study|read|review|write/i.test(taskTitle)) {
+    return ['Pomodoro technique', 'Flashcard review', 'Mind mapping'];
+  } else {
+    return ['Option A', 'Option B', 'Option C'];
   }
 }
 
@@ -92,73 +135,119 @@ async function generateSuggestions(
 function constructSuggestionPrompt(
   taskTitle: string,
   userProfile: any,
-  recentFeedback?: string
+  implicitNeeds?: string[],
+  recentFeedback?: string,
+  userContextHistory?: string
 ): string {
-  let prompt = `请处理任务「${taskTitle}」：\n\n`;
+  let prompt = `Please process the task "${taskTitle}":\n\n`;
   
   // Add user profile information
-  prompt += '【用户画像】\n';
-  prompt += '◆ 基础档案：';
+  prompt += '【User Profile】\n';
+  prompt += '◆ Basic Information:';
   const basicInfo = [];
-  if (userProfile.age) basicInfo.push(`年龄 ${userProfile.age}`);
-  if (userProfile.occupation) basicInfo.push(`职业 ${userProfile.occupation}`);
-  if (userProfile.location) basicInfo.push(`地理位置 ${userProfile.location}`);
-  if (userProfile.height) basicInfo.push(`身高 ${userProfile.height}`);
-  if (userProfile.weight) basicInfo.push(`体重 ${userProfile.weight}`);
-  prompt += basicInfo.join('、') + '\n';
+  if (userProfile.age) basicInfo.push(`Age ${userProfile.age}`);
+  if (userProfile.occupation) basicInfo.push(`Occupation ${userProfile.occupation}`);
+  if (userProfile.location) basicInfo.push(`Location ${userProfile.location}`);
+  if (userProfile.height) basicInfo.push(`Height ${userProfile.height}`);
+  if (userProfile.weight) basicInfo.push(`Weight ${userProfile.weight}`);
+  prompt += basicInfo.join(', ') + '\n';
   
   // Add ability characteristics
-  prompt += '◆ 能力特征：';
+  prompt += '◆ Ability Characteristics:';
   const abilities = [];
   if (userProfile.strengths && userProfile.strengths.length > 0) {
-    abilities.push(`优势 ${userProfile.strengths.join('、')}`);
+    abilities.push(`Strengths: ${userProfile.strengths.join(', ')}`);
   }
   if (userProfile.weaknesses && userProfile.weaknesses.length > 0) {
-    abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
+    abilities.push(`Weaknesses: ${userProfile.weaknesses.join(', ')}`);
   }
-  prompt += abilities.join('、') + '\n';
+  prompt += abilities.join(', ') + '\n';
+  
+  // Add special conditions (health, work, learning, etc.)
+  prompt += '◆ Special Conditions:';
+  if (userProfile.healthConditions && userProfile.healthConditions.length > 0) {
+    prompt += `Health: ${userProfile.healthConditions.join(', ')}`;
+  }
+  if (userProfile.workConditions && userProfile.workConditions.length > 0) {
+    prompt += `Work: ${userProfile.workConditions.join(', ')}`;
+  }
+  if (userProfile.learningConditions && userProfile.learningConditions.length > 0) {
+    prompt += `Learning: ${userProfile.learningConditions.join(', ')}`;
+  }
+  if (!userProfile.healthConditions && !userProfile.workConditions && !userProfile.learningConditions) {
+    prompt += 'No special conditions';
+  }
+  prompt += '\n';
   
   // Add historical trajectory
-  prompt += '◆ 历史轨迹：';
+  prompt += '◆ Historical Trajectory:';
   if (userProfile.history) {
     prompt += userProfile.history;
   } else if (recentFeedback) {
     prompt += recentFeedback;
   } else {
-    prompt += '无历史记录';
+    prompt += 'No history';
   }
   prompt += '\n\n';
   
   // Add task context
-  prompt += '【任务上下文】\n';
-  prompt += `★ 显性需求：${taskTitle}\n`;
+  prompt += '【Task Context】\n';
+  prompt += `★ Explicit Need: ${taskTitle}\n`;
   
-  // Add implicit needs based on goals
-  prompt += '★ 隐性需求：';
-  if (userProfile.goals && userProfile.goals.length > 0) {
-    prompt += userProfile.goals.join('、');
+  // Add implicit needs based on active goals
+  prompt += '★ Implicit Needs:';
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += implicitNeeds.join(', ');
+  } else if (userProfile.goals && userProfile.goals.length > 0) {
+    // If implicitNeeds not provided, use userProfile.goals as backup
+    prompt += userProfile.goals.join(', ');
   } else {
-    prompt += '未明确';
+    prompt += 'Not specified';
   }
   prompt += '\n';
   
   // Add constraints
-  prompt += '★ 约束条件：';
+  prompt += '★ Constraints:';
   const constraints = [];
-  if (userProfile.timeConstraints) constraints.push(`时间 ${userProfile.timeConstraints}`);
-  if (userProfile.resourceConstraints) constraints.push(`资源 ${userProfile.resourceConstraints}`);
+  if (userProfile.timeConstraints) constraints.push(`Time ${userProfile.timeConstraints}`);
+  if (userProfile.resourceConstraints) constraints.push(`Resources ${userProfile.resourceConstraints}`);
   if (userProfile.restrictions && userProfile.restrictions.length > 0) {
-    constraints.push(`限制 ${userProfile.restrictions.join('、')}`);
+    constraints.push(`Restrictions ${userProfile.restrictions.join(', ')}`);
   }
-  prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
+  prompt += constraints.length > 0 ? constraints.join(', ') : 'No explicit constraints';
   prompt += '\n\n';
   
-  // Add interaction mode with new constraints
-  prompt += '【交互模式】\n';
-  prompt += '▸ 输出格式：提供3个简短建议，每个建议必须以疑问句开头，后跟简短方案\n';
-  prompt += '▸ 语气要求：专业、亲切、激励\n';
-  prompt += '▸ 长度限制：每个建议不超过20个字符\n';
-  prompt += '▸ 输出示例：\n1. 髋关节好些了吗？做恢复训练\n2. 想增强核心吗？尝试平板支撑\n3. 需要放松吗？试试瑜伽拉伸\n';
+  // Add notes about the relationship between current task and implicit needs
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += '【Notes】\n';
+    prompt += `★ Relationship between current task and user's long-term goals: Please consider how the current task "${taskTitle}" relates to the user's implicit needs (${implicitNeeds.join(', ')}).\n`;
+    prompt += '★ Prioritize the most relevant goals: When generating suggestions, prioritize the goals most relevant to the current task, rather than considering all goals.\n\n';
+  }
+  
+  // Add relevant user context history (if available)
+  if (userContextHistory && userContextHistory.length > 0) {
+    // Extract relevant context using the same method as in plan API
+    const relevantContext = extractRelevantContext(userContextHistory, taskTitle, '');
+    if (relevantContext.length > 0) {
+      prompt += '【User Context History】\n';
+      prompt += relevantContext + '\n\n';
+    }
+  }
+  
+  // Output requirements
+  prompt += '【Output Requirements】\n';
+  prompt += '1. Analyze the task and determine the most important core dimension for this task\n';
+  prompt += '2. Provide three different specific options within that dimension\n';
+  prompt += '3. Each option must:\n';
+  prompt += `   - Be directly related to the task "${taskTitle}"\n`;
+  prompt += '   - Be kept within 10 characters\n';
+  prompt += '   - Be concise and clear like app options\n';
+  prompt += '   - Avoid verbose explanations and modifiers\n';
+  prompt += '4. The three options should:\n';
+  prompt += '   - Belong to the same dimension (e.g., all exercise types, all execution methods, etc.)\n';
+  prompt += '   - Be mutually exclusive (user can only choose one)\n';
+  prompt += '   - Consider user circumstances and preferences\n';
+  prompt += '   - Possibly align with user\'s implicit needs/long-term goals\n';
   
   return prompt;
 }
@@ -166,36 +255,110 @@ function constructSuggestionPrompt(
 /**
  * Parse suggestions from DeepSeek API response
  */
-function parseSuggestions(content: string): string[] {
+function parseSuggestions(content: string, taskTitle: string): string[] {
   try {
-    // Split by newlines and filter out empty lines
+    console.log('[API-Suggestions] Original content:', content);
+    
+    // Simplified parsing, only extract short options
     const lines = content.split('\n')
-      .filter(line => line.trim().length > 0)
-      // Remove any numbering or bullet points at the beginning
-      .map(line => line.replace(/^(\d+\.|\*|\-)\s*/, '').trim())
-      // Ensure each suggestion is not longer than 20 characters
-      .map(line => line.length > 20 ? line.substring(0, 20) : line);
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && line.length <= 20) // Control length more strictly
+      // Remove any line markers, numbers, etc.
+      .map(line => line.replace(/^([0-9]+\.|\*|\-|>|#|【|】)\s*/, ''))
+      .map(line => line.replace(/^\*\*|\*\*$/g, ''))
+      // Filter out empty lines, too short lines, lines with punctuation
+      .filter(line => line.length >= 2 && 
+                      !line.includes(':') && 
+                      !line.includes('：') &&
+                      !line.includes('dimension') &&
+                      !line.includes('options') &&
+                      !line.includes('Option'));
     
-    // Ensure we have exactly three suggestions
-    const suggestions = lines.slice(0, 3);
+    // Get the most likely suggestions
+    let suggestions = lines.slice(0, 5);
     
-    // If we don't have enough suggestions, add generic ones
+    // If we have more than 3 suggestions, try to find the most relevant ones
+    if (suggestions.length > 3) {
+      // Sort by relevance to task title (simple word matching)
+      const taskWords = taskTitle.toLowerCase().split(/\s+/);
+      suggestions = suggestions.sort((a, b) => {
+        const aScore = taskWords.filter(word => a.toLowerCase().includes(word)).length;
+        const bScore = taskWords.filter(word => b.toLowerCase().includes(word)).length;
+        return bScore - aScore;
+      });
+    }
+    
+    // Take the top 3 suggestions or pad with defaults if needed
+    suggestions = suggestions.slice(0, 3);
+    
+    // If we don't have enough suggestions, add defaults
     while (suggestions.length < 3) {
-      const defaultSuggestions = [
-        '需要恢复吗？做轻度训练',
-        '想增强体能吗？核心训练',
-        '关节不适吗？试试拉伸'
-      ];
-      suggestions.push(defaultSuggestions[suggestions.length % defaultSuggestions.length]);
+      suggestions.push(`Option ${suggestions.length + 1}`);
     }
     
     return suggestions;
   } catch (error) {
-    console.error('Error parsing suggestions:', error);
-    return [
-      '需要恢复吗？做轻度训练',
-      '想增强体能吗？核心训练',
-      '关节不适吗？试试拉伸'
-    ];
+    console.error('[API-Suggestions] Error parsing suggestions:', error);
+    return ['Option 1', 'Option 2', 'Option 3'];
   }
+}
+
+/**
+ * Extract relevant context from user history
+ */
+function extractRelevantContext(
+  userContextHistory: string, 
+  taskTitle: string, 
+  selectedSuggestion: string = '',
+  maxChars = 1000
+): string {
+  if (!userContextHistory || userContextHistory.length === 0) {
+    return '';
+  }
+  
+  // Split history into individual entries
+  const entries = userContextHistory.split('\n').filter(entry => entry.trim().length > 0);
+  if (entries.length === 0) {
+    return '';
+  }
+  
+  // Simple implementation: select entries containing keywords
+  const keywordsSet = new Set<string>([
+    ...taskTitle.toLowerCase().split(/\s+/),
+    ...(selectedSuggestion ? selectedSuggestion.toLowerCase().split(/\s+/) : [])
+  ]);
+  const keywords = Array.from(keywordsSet).filter(word => word.length > 3); // Only use longer words as keywords
+  
+  // Score each entry based on the number of keywords it contains
+  const scoredEntries = entries.map(entry => {
+    const lowerEntry = entry.toLowerCase();
+    // Calculate score: number of keywords found + newer entries score higher
+    let score = 0;
+    keywords.forEach(word => {
+      if (lowerEntry.includes(word)) {
+        score += 1;
+      }
+    });
+    
+    // Specific types of entries get bonus points
+    if (entry.includes('[Task Feedback]')) score += 2;
+    if (entry.includes('[Task Update]')) score += 1;
+    if (entry.includes('[New Task]')) score += 1;
+    
+    return { entry, score };
+  });
+  
+  // Sort by score and keep the most relevant entries
+  scoredEntries.sort((a, b) => b.score - a.score);
+  
+  // Combine the most relevant entries until reaching the maximum character count
+  let relevantContext = '';
+  for (const { entry } of scoredEntries) {
+    if (relevantContext.length + entry.length + 1 > maxChars) {
+      break;
+    }
+    relevantContext += entry + '\n';
+  }
+  
+  return relevantContext;
 } 
