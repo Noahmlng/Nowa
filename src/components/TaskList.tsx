@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag, Edit2 } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag, Edit2, Wand2 } from 'lucide-react';
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
@@ -587,6 +587,15 @@ export default function TaskList({ filter }: TaskListProps) {
                           </div>
                           
                           <div className="flex items-center space-x-1">
+                            {/* AI Suggestions button */}
+                            <button
+                              className="text-gray-400 hover:text-purple-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                              onClick={(e) => handleShowAiSuggestions(task.id, e)}
+                              title="生成个性化详细计划"
+                            >
+                              <Wand2 className="h-4 w-4" />
+                            </button>
+                            
                             {/* Important flag button */}
                             <button 
                               className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-500'}`}
@@ -594,15 +603,6 @@ export default function TaskList({ filter }: TaskListProps) {
                               title={task.important ? "取消重要标记" : "标记为重要"}
                             >
                               <Flag size={16} />
-                            </button>
-                            
-                            {/* AI Suggestions button */}
-                            <button
-                              className="text-gray-400 hover:text-purple-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                              onClick={(e) => handleShowAiSuggestions(task.id, e)}
-                              title="Get AI suggestions"
-                            >
-                              <Zap className="h-4 w-4" />
                             </button>
                             
                             {/* Delete button */}
