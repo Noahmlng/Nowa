@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Check, ChevronRight, Clock } from 'lucide-react';
-import { useStore } from '@/store/store';
+import { useAppStore } from '@/store/store';
 
 interface TaskSuggestionsProps {
   taskId: string;
@@ -30,7 +30,7 @@ interface TimelinePhase {
  * Allows users to select a suggestion and see a detailed plan.
  */
 export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProps) {
-  const { tasks, userProfile, updateTask, addTaskFeedback } = useStore();
+  const { tasks, userProfile, updateTask, addTaskFeedback, addToUserContextHistory } = useAppStore();
   
   // Find the target task
   const task = tasks.find(t => t.id === taskId);
@@ -75,7 +75,11 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           body: JSON.stringify({
             taskTitle: task.title,
             userProfile,
-            recentFeedback
+            implicitNeeds: userProfile.goals,
+            recentFeedback: task.feedback && task.feedback.length > 0 
+              ? task.feedback.map(f => f.text).join('\n') 
+              : undefined,
+            userContextHistory: userProfile.userContextHistory
           })
         });
         
@@ -124,10 +128,11 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          taskId: task.id,
           taskTitle: task.title,
           selectedSuggestion: suggestion,
           userProfile,
-          recentFeedback
+          userContextHistory: userProfile.userContextHistory
         })
       });
       
@@ -135,8 +140,17 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         throw new Error('Failed to load detailed plan');
       }
       
-      const plan = await response.json();
-      setDetailedPlan(plan);
+      const data = await response.json();
+      console.log('Received plan data:', data); // 添加日志以便调试
+      
+      // 确保 plan 对象有正确的结构
+      if (data && data.plan) {
+        // 从 Markdown 内容创建结构化的计划
+        const parsedPlan = parseMarkdownPlan(data.plan, task.title, suggestion);
+        setDetailedPlan(parsedPlan);
+      } else {
+        throw new Error('Invalid plan data received');
+      }
     } catch (error) {
       console.error('Error loading detailed plan:', error);
       
@@ -144,28 +158,155 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       const fallbackSubtasks: Subtask[] = [
         { 
           id: `subtask-${Date.now()}-1`, 
-          title: 'Warm up for 5 minutes', 
+          title: '热身 5 分钟', 
           completed: false 
         },
         { 
           id: `subtask-${Date.now()}-2`, 
-          title: 'Complete main activity (20 minutes)', 
+          title: '完成主要活动（20 分钟）', 
           completed: false 
         },
         { 
           id: `subtask-${Date.now()}-3`, 
-          title: 'Cool down and stretch (5 minutes)', 
+          title: '放松和拉伸（5 分钟）', 
           completed: false 
         }
       ];
       
       setDetailedPlan({
-        title: task?.title || 'Exercise Plan',
+        title: task?.title || '运动计划',
         description: suggestion,
         subtasks: fallbackSubtasks
       });
     } finally {
       setLoadingPlan(false);
+    }
+  };
+  
+  // 解析 Markdown 格式的计划内容
+  const parseMarkdownPlan = (markdownContent: string, taskTitle: string, suggestion: string): {
+    title: string;
+    description: string;
+    subtasks: Subtask[];
+    timeline?: TimelinePhase[];
+  } => {
+    try {
+      // 默认值
+      let title = taskTitle;
+      let description = markdownContent;
+      const subtasks: Subtask[] = [];
+      const timeline: TimelinePhase[] = [];
+      
+      // 尝试提取标题（通常是第一个 # 标题）
+      const titleMatch = markdownContent.match(/^#\s+(.+)$/m);
+      if (titleMatch && titleMatch[1]) {
+        title = titleMatch[1].trim();
+      }
+      
+      // 尝试提取步骤作为子任务
+      const stepsSection = markdownContent.match(/##\s+Steps|##\s+步骤\s*\n([\s\S]*?)(?=##|$)/i);
+      if (stepsSection && stepsSection[1]) {
+        const steps = stepsSection[1].match(/\d+\.\s+(.+)$/gm);
+        if (steps) {
+          steps.forEach((step, index) => {
+            const stepText = step.replace(/^\d+\.\s+/, '').trim();
+            if (stepText) {
+              subtasks.push({
+                id: `subtask-${Date.now()}-${index}`,
+                title: stepText,
+                completed: false
+              });
+            }
+          });
+        }
+      }
+      
+      // 如果没有找到子任务，尝试查找列表项
+      if (subtasks.length === 0) {
+        const listItems = markdownContent.match(/[-*]\s+(.+)$/gm);
+        if (listItems) {
+          listItems.forEach((item, index) => {
+            const itemText = item.replace(/^[-*]\s+/, '').trim();
+            if (itemText) {
+              subtasks.push({
+                id: `subtask-${Date.now()}-${index}`,
+                title: itemText,
+                completed: false
+              });
+            }
+          });
+        }
+      }
+      
+      // 如果仍然没有子任务，创建一些默认的中文子任务
+      if (subtasks.length === 0) {
+        subtasks.push(
+          { 
+            id: `subtask-${Date.now()}-1`, 
+            title: '开始任务', 
+            completed: false 
+          },
+          { 
+            id: `subtask-${Date.now()}-2`, 
+            title: '完成主要活动', 
+            completed: false 
+          },
+          { 
+            id: `subtask-${Date.now()}-3`, 
+            title: '回顾与总结', 
+            completed: false 
+          }
+        );
+      }
+      
+      // 尝试提取时间线信息
+      const timelineSection = markdownContent.match(/##\s+Timeline|##\s+时间线|##\s+执行时间线\s*\n([\s\S]*?)(?=##|$)/i);
+      if (timelineSection && timelineSection[1]) {
+        // 尝试匹配时间线项目，格式可能是：阶段名称（持续时间）：描述
+        const timelineItems = timelineSection[1].match(/\d+\.\s+(.+?)（(.+?)）[：:]\s*(.+)$/gm);
+        if (timelineItems) {
+          timelineItems.forEach((item, index) => {
+            const match = item.match(/\d+\.\s+(.+?)（(.+?)）[：:]\s*(.+)$/);
+            if (match && match.length >= 4) {
+              timeline.push({
+                phase: match[1].trim(),
+                duration: match[2].trim(),
+                description: match[3].trim()
+              });
+            }
+          });
+        }
+      }
+      
+      return {
+        title,
+        description,
+        subtasks,
+        timeline: timeline.length > 0 ? timeline : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing markdown plan:', error);
+      return {
+        title: taskTitle,
+        description: markdownContent || suggestion,
+        subtasks: [
+          { 
+            id: `subtask-${Date.now()}-1`, 
+            title: '开始任务', 
+            completed: false 
+          },
+          { 
+            id: `subtask-${Date.now()}-2`, 
+            title: '完成主要活动', 
+            completed: false 
+          },
+          { 
+            id: `subtask-${Date.now()}-3`, 
+            title: '回顾与总结', 
+            completed: false 
+          }
+        ]
+      };
     }
   };
   
@@ -180,13 +321,23 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         : detailedPlan.description,
       subtasks: [
         ...(task.subtasks || []),
-        ...detailedPlan.subtasks
+        ...(detailedPlan.subtasks || [])
       ],
       timeline: detailedPlan.timeline
     });
     
     // Add feedback record
     addTaskFeedback(task.id, `Applied AI-suggested plan: ${selectedSuggestion}`);
+    
+    // Add to user context history
+    if (userProfile.userContextHistory !== undefined) {
+      const contextUpdate = `[Task Plan] Applied plan for task "${task.title}" with suggestion "${selectedSuggestion}"`;
+      // Assuming there's a function to add to context history in the store
+      // This will depend on your actual implementation
+      if (typeof addToUserContextHistory === 'function') {
+        addToUserContextHistory(contextUpdate);
+      }
+    }
     
     // Close the suggestions panel
     onClose();
@@ -281,7 +432,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                     </div>
                     
                     {/* Timeline Section */}
-                    {detailedPlan.timeline && detailedPlan.timeline.length > 0 && (
+                    {detailedPlan.timeline && Array.isArray(detailedPlan.timeline) && detailedPlan.timeline.length > 0 && (
                       <div className="mt-6">
                         <h4 className="text-md font-medium text-gray-800 mb-3 flex items-center">
                           <Clock size={18} className="mr-2 text-blue-500" />
@@ -313,7 +464,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                     <div>
                       <h4 className="text-md font-medium text-gray-800 mb-3">子任务</h4>
                       <div className="space-y-2">
-                        {detailedPlan.subtasks.map((subtask, index) => (
+                        {detailedPlan.subtasks && Array.isArray(detailedPlan.subtasks) && detailedPlan.subtasks.map((subtask, index) => (
                           <div 
                             key={subtask.id} 
                             className="flex items-start p-2 rounded-md hover:bg-gray-50"
