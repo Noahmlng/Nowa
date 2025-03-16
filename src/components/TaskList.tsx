@@ -52,7 +52,7 @@ interface TaskListProps {
  */
 export default function TaskList({ filter }: TaskListProps) {
   // Get tasks and task actions from the global store
-  const { tasks, addTask, updateTask, deleteTask, toggleTaskComplete, toggleTaskImportant, goals } = useAppStore();
+  const { tasks, addTask, updateTask, deleteTask, toggleTaskComplete, toggleTaskImportant, goals, addToUserContextHistory } = useAppStore();
   
   // Local state
   const [newTaskTitle, setNewTaskTitle] = useState(''); // For the new task input
@@ -296,7 +296,13 @@ export default function TaskList({ filter }: TaskListProps) {
       }
       
       // Add the task
-      addTask(newTask);
+      const newTaskId = addTask(newTask);
+      
+      // Add to user context history
+      if (typeof addToUserContextHistory === 'function') {
+        const contextUpdate = `[New Task] Created task "${newTask.title}"`;
+        addToUserContextHistory(contextUpdate);
+      }
       
       // Clear the input field
       setNewTaskTitle('');
@@ -307,12 +313,22 @@ export default function TaskList({ filter }: TaskListProps) {
    * Add a task to My Day
    */
   const handleAddToMyDay = (taskId: string) => {
+    // Find the task
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
     // Set the task's due date to today and update the taskListId
     const today = new Date().toISOString().split('T')[0];
     updateTask(taskId, { 
       taskListId: 'today',
       dueDate: today
     });
+    
+    // Add to user context history
+    if (typeof addToUserContextHistory === 'function') {
+      const contextUpdate = `[Task Update] Added task "${task.title}" to My Day`;
+      addToUserContextHistory(contextUpdate);
+    }
   };
 
   /**
@@ -573,7 +589,7 @@ export default function TaskList({ filter }: TaskListProps) {
                           <div className="flex items-center space-x-1">
                             {/* Important flag button */}
                             <button 
-                              className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-300'}`}
+                              className={`p-1 rounded-full hover:bg-gray-100 transition-colors ${task.important ? 'text-red-500' : 'text-gray-500'}`}
                               onClick={(e) => handleToggleImportant(task.id, e)}
                               title={task.important ? "取消重要标记" : "标记为重要"}
                             >
