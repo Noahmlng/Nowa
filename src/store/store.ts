@@ -20,6 +20,7 @@ interface UserProfile {
   hobbies?: string[];                              // User's hobbies
   goals?: string[];                                // User's personal goals
   notes?: string;                                  // Additional notes
+  userContextHistory?: string;                     // 累积式用户上下文历史
 }
 
 /**
@@ -181,6 +182,10 @@ interface AppState {
   findSimilarTasks: (taskEmbedding: number[], threshold?: number) => Task[]; // Find tasks similar to embedding
   updateTaskEmbeddings: (taskId: string, embeddings: number[]) => void; // Update task embeddings
   generateTaskProposal: (input: string) => TaskProposal; // Generate a task proposal
+  
+  // User Context History
+  addToUserContextHistory: (context: string) => void;      // 添加新的上下文信息到历史记录
+  getUserRelevantContext: (query: string, maxLength?: number) => string;  // 根据查询获取相关上下文
 }
 
 /**
@@ -202,7 +207,8 @@ export const useAppStore = create<AppState>()(
         interests: ['AI', 'Programming', 'Reading'],
         hobbies: ['Running', 'Photography', 'Cooking'],
         goals: ['Learn a new language', 'Run a marathon'],
-        notes: ''
+        notes: '',
+        userContextHistory: ''
       },
       tasks: [],
       goals: [],
@@ -219,33 +225,131 @@ export const useAppStore = create<AppState>()(
       taskEdges: [],
       
       // User actions
-      updateUser: (userData) => set((state) => ({
-        user: { ...state.user, ...userData }
-      })),
+      updateUser: (userData) => {
+        set((state) => {
+          const updatedUser = { ...state.user, ...userData };
+          
+          // 将更新的用户信息添加到上下文历史
+          const contextUpdate = `[用户更新] 昵称: ${updatedUser.nickname}, 标签: ${updatedUser.tags.join(', ')}`;
+          get().addToUserContextHistory(contextUpdate);
+          
+          return { user: updatedUser };
+        });
+      },
       
-      updateUserProfile: (profileData) => set((state) => ({
-        userProfile: { ...state.userProfile, ...profileData }
-      })),
+      updateUserProfile: (profileData) => {
+        set((state) => {
+          const updatedProfile = { ...state.userProfile, ...profileData };
+          
+          // 将更新的profile信息添加到上下文历史
+          let contextUpdate = '[个人资料更新] ';
+          if (profileData.weight) contextUpdate += `体重: ${profileData.weight}, `;
+          if (profileData.height) contextUpdate += `身高: ${profileData.height}, `;
+          if (profileData.personality) contextUpdate += `性格特点: ${profileData.personality.join(', ')}, `;
+          if (profileData.interests) contextUpdate += `兴趣: ${profileData.interests.join(', ')}, `;
+          if (profileData.hobbies) contextUpdate += `爱好: ${profileData.hobbies.join(', ')}, `;
+          if (profileData.goals) contextUpdate += `目标: ${profileData.goals.join(', ')}, `;
+          if (profileData.notes) contextUpdate += `备注: ${profileData.notes}`;
+          
+          get().addToUserContextHistory(contextUpdate);
+          
+          return { userProfile: updatedProfile };
+        });
+      },
       
-      // Task actions implementation
-      addTask: (task) => 
-        set((state) => ({ 
-          tasks: [...state.tasks, { ...task, id: `task-${Date.now()}`, important: task.important || false }] 
-        })),
+      // 用户上下文历史相关方法
+      addToUserContextHistory: (context: string) => {
+        set((state) => {
+          const timestamp = new Date().toISOString();
+          const formattedContext = `[${timestamp}] ${context}\n`;
+          
+          // 获取现有历史记录，如果不存在则创建新的
+          const currentHistory = state.userProfile.userContextHistory || '';
+          
+          // 添加新的上下文到历史记录
+          const updatedProfile = { 
+            ...state.userProfile, 
+            userContextHistory: currentHistory + formattedContext
+          };
+          
+          console.log('添加到用户上下文历史:', formattedContext);
+          
+          return { userProfile: updatedProfile };
+        });
+      },
       
-      updateTask: (id, updatedTask) => 
-        set((state) => ({ 
-          tasks: state.tasks.map(task => 
-            task.id === id ? { ...task, ...updatedTask } : task
-          ) 
-        })),
+      // 获取与查询相关的上下文
+      getUserRelevantContext: (query: string, maxLength = 2000) => {
+        const state = get();
+        const history = state.userProfile.userContextHistory || '';
+        
+        // 最简单的实现：如果没有太多历史记录，直接返回所有
+        if (history.length <= maxLength) {
+          return history;
+        }
+        
+        // TODO: 未来可以实现更复杂的上下文检索逻辑，使用embedding相似度
+        // 目前简单的实现：假设最近的条目更重要，返回最近的内容
+        const entries = history.split('\n').filter(entry => entry.trim().length > 0);
+        let relevantContext = '';
+        
+        // 从最新到最旧添加条目，直到达到最大长度
+        for (let i = entries.length - 1; i >= 0; i--) {
+          if ((relevantContext + entries[i] + '\n').length > maxLength) {
+            break;
+          }
+          relevantContext = entries[i] + '\n' + relevantContext;
+        }
+        
+        return relevantContext;
+      },
       
-      deleteTask: (id) => 
+      // Task actions
+      addTask: (task) => {
+        set((state) => {
+          const id = generateId();
+          const newTask = { id, ...task } as Task;
+          
+          // 将新任务添加到上下文历史
+          const contextUpdate = `[新任务] ID: ${id}, 标题: ${task.title}, 优先级: ${task.priority}, 类型: ${task.type || '未指定'}`;
+          get().addToUserContextHistory(contextUpdate);
+          
+          return { tasks: [...state.tasks, newTask] };
+        });
+      },
+      
+      updateTask: (id: string, taskUpdate: Partial<Task>) => {
+        set((state) => {
+          const tasks = state.tasks.map((t) => {
+            if (t.id === id) {
+              const updatedTask = { ...t, ...taskUpdate };
+              
+              // 将任务更新添加到上下文历史
+              let contextUpdate = `[任务更新] ID: ${id}`;
+              if (taskUpdate.title) contextUpdate += `, 标题: ${taskUpdate.title}`;
+              if (taskUpdate.status) contextUpdate += `, 状态: ${taskUpdate.status}`;
+              if (taskUpdate.priority) contextUpdate += `, 优先级: ${taskUpdate.priority}`;
+              if (taskUpdate.description) contextUpdate += `, 描述已更新`;
+              if (taskUpdate.subtasks) contextUpdate += `, 子任务已更新`;
+              
+              get().addToUserContextHistory(contextUpdate);
+              
+              return updatedTask;
+            }
+            return t;
+          });
+          
+          return { tasks };
+        });
+      },
+      
+      deleteTask: (id) => {
         set((state) => ({ 
           tasks: state.tasks.filter(task => task.id !== id) 
-        })),
+        }));
+      },
       
-      toggleTaskComplete: (id) => 
+      toggleTaskComplete: (id) => {
         set((state) => ({ 
           tasks: state.tasks.map(task => 
             task.id === id 
@@ -256,57 +360,60 @@ export const useAppStore = create<AppState>()(
                 } 
               : task
           ) 
-        })),
+        }));
+      },
       
-      toggleTaskImportant: (id) => 
+      toggleTaskImportant: (id) => {
         set((state) => ({ 
           tasks: state.tasks.map(task => 
             task.id === id 
               ? { ...task, important: !task.important } 
               : task
           ) 
-        })),
+        }));
+      },
       
-      addTaskFeedback: (id, feedback) => 
+      addTaskFeedback: (id, feedback) => {
         set((state) => {
-          // Try to parse JSON string or use as plain text
-          let feedbackItem;
-          try {
-            feedbackItem = JSON.parse(feedback);
-          } catch {
-            // If parsing fails, create a new feedback item with timestamp
-            feedbackItem = {
-              text: feedback,
-              timestamp: new Date().toISOString()
-            };
-          }
+          const tasks = state.tasks.map((t) => {
+            if (t.id === id) {
+              const feedbackItem = {
+                text: feedback,
+                timestamp: new Date().toISOString()
+              };
+              
+              // 将反馈添加到上下文历史
+              const contextUpdate = `[任务反馈] 任务ID: ${id}, 反馈: ${feedback}`;
+              get().addToUserContextHistory(contextUpdate);
+              
+              return {
+                ...t,
+                feedback: t.feedback ? [...t.feedback, feedbackItem] : [feedbackItem]
+              };
+            }
+            return t;
+          });
           
-          return { 
-            tasks: state.tasks.map(task => 
-              task.id === id 
-                ? { 
-                    ...task, 
-                    feedback: task.feedback ? [...task.feedback, feedbackItem] : [feedbackItem] 
-                  } 
-                : task
-            ) 
-          };
-        }),
+          return { tasks };
+        });
+      },
       
-      // Goal actions implementation
-      addGoal: (goal) => 
+      // Goal actions
+      addGoal: (goal) => {
         set((state) => ({ 
           goals: [...state.goals, { ...goal, id: `goal-${Date.now()}`, order: state.goals.length }] 
-        })),
+        }));
+      },
       
-      updateGoal: (id, updatedGoal) => 
+      updateGoal: (id, updatedGoal) => {
         set((state) => ({ 
           goals: state.goals.map(goal => 
             goal.id === id ? { ...goal, ...updatedGoal } : goal
           ) 
-        })),
+        }));
+      },
       
-      deleteGoal: (id) => 
+      deleteGoal: (id) => {
         set((state) => {
           // Also delete all key results associated with the goal
           const keyResultsToKeep = state.keyResults.filter(kr => kr.goalId !== id);
@@ -314,7 +421,8 @@ export const useAppStore = create<AppState>()(
             goals: state.goals.filter(goal => goal.id !== id),
             keyResults: keyResultsToKeep
           };
-        }),
+        });
+      },
       
       reorderGoals: (goalIds) => {
         set((state) => {
@@ -334,7 +442,7 @@ export const useAppStore = create<AppState>()(
         });
       },
       
-      // KeyResult actions implementation
+      // KeyResult actions
       addKeyResult: (keyResult) => {
         const id = `kr-${Date.now()}`;
         set((state) => ({ 
@@ -454,40 +562,46 @@ export const useAppStore = create<AppState>()(
         }
       },
       
-      // TaskList actions implementation
-      addTaskList: (taskList) => 
+      // TaskList actions
+      addTaskList: (taskList) => {
         set((state) => ({ 
           taskLists: [...state.taskLists, { ...taskList, id: `list-${Date.now()}` }] 
-        })),
+        }));
+      },
       
-      updateTaskList: (id, updatedTaskList) => 
+      updateTaskList: (id, updatedTaskList) => {
         set((state) => ({ 
           taskLists: state.taskLists.map(list => 
             list.id === id ? { ...list, ...updatedTaskList } : list
           ) 
-        })),
+        }));
+      },
       
-      deleteTaskList: (id) => 
+      deleteTaskList: (id) => {
         set((state) => ({ 
           taskLists: state.taskLists.filter(list => list.id !== id) 
-        })),
+        }));
+      },
       
       // UI state actions
-      setSelectedList: (listId) => 
-        set({ selectedList: listId }),
+      setSelectedList: (listId) => {
+        set({ selectedList: listId });
+      },
       
       // Task Graph actions
-      addTaskEdge: (edge) => 
+      addTaskEdge: (edge) => {
         set((state) => ({ 
           taskEdges: [...state.taskEdges, edge] 
-        })),
+        }));
+      },
       
-      removeTaskEdge: (fromId, toId) => 
+      removeTaskEdge: (fromId, toId) => {
         set((state) => ({ 
           taskEdges: state.taskEdges.filter(edge => 
             edge.fromTaskId !== fromId || edge.toTaskId !== toId 
           ) 
-        })),
+        }));
+      },
       
       findRelatedTasks: (taskId) => {
         const state = get();
@@ -503,12 +617,13 @@ export const useAppStore = create<AppState>()(
         );
       },
       
-      updateTaskEmbeddings: (taskId, embeddings) => 
+      updateTaskEmbeddings: (taskId, embeddings) => {
         set((state) => ({ 
           tasks: state.tasks.map(task => 
             task.id === taskId ? { ...task, embeddings } : task
           ) 
-        })),
+        }));
+      },
       
       generateTaskProposal: (input) => {
         // This is a placeholder implementation
@@ -525,7 +640,17 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'nowa-storage', // Name for the localStorage key
+      name: 'task-graph-store',
+      partialize: (state) => ({
+        user: state.user,
+        userProfile: state.userProfile,
+        tasks: state.tasks,
+        goals: state.goals,
+        keyResults: state.keyResults,
+        taskLists: state.taskLists,
+        selectedList: state.selectedList,
+        taskEdges: state.taskEdges,
+      }),
     }
   )
 );
@@ -555,4 +680,9 @@ function cosineSimilarity(vec1: number[], vec2: number[]): number {
   if (mag1 === 0 || mag2 === 0) return 0;
   
   return dotProduct / (mag1 * mag2);
+}
+
+// Helper function to generate unique IDs
+function generateId(): string {
+  return `task-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 } 

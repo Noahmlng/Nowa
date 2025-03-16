@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     // Parse request body
-    const { taskTitle, userProfile, implicitNeeds, recentFeedback } = await request.json();
+    const { taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory } = await request.json();
     
     if (!taskTitle) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const suggestions = await generateSuggestions(taskTitle, userProfile, implicitNeeds, recentFeedback);
+    const suggestions = await generateSuggestions(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
     
     return NextResponse.json({ suggestions });
   } catch (error) {
@@ -35,11 +35,12 @@ async function generateSuggestions(
   taskTitle: string,
   userProfile: any,
   implicitNeeds?: string[],
-  recentFeedback?: string
+  recentFeedback?: string,
+  userContextHistory?: string
 ): Promise<string[]> {
   try {
     // Construct the prompt
-    const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback);
+    const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
     console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
     
     // 请求配置
@@ -135,7 +136,8 @@ function constructSuggestionPrompt(
   taskTitle: string,
   userProfile: any,
   implicitNeeds?: string[],
-  recentFeedback?: string
+  recentFeedback?: string,
+  userContextHistory?: string
 ): string {
   let prompt = `请处理任务「${taskTitle}」：\n\n`;
   
@@ -222,6 +224,16 @@ function constructSuggestionPrompt(
     prompt += '★ 优先考虑最相关的目标：在生成建议时，请优先考虑与当前任务最相关的目标，而不是考虑所有目标。\n\n';
   }
   
+  // 添加相关的用户上下文历史（如果有）
+  if (userContextHistory && userContextHistory.length > 0) {
+    // 使用与plan API相同的方法提取相关上下文
+    const relevantContext = extractRelevantContext(userContextHistory, taskTitle, '');
+    if (relevantContext.length > 0) {
+      prompt += '【用户历史上下文】\n';
+      prompt += relevantContext + '\n\n';
+    }
+  }
+  
   // 修改输出要求为同一维度下的不同选项
   prompt += '【输出要求】\n';
   prompt += '1. 分析任务，确定对这个任务最重要的一个核心维度\n';
@@ -255,6 +267,66 @@ function constructSuggestionPrompt(
   }
   
   return prompt;
+}
+
+/**
+ * Extract relevant context from user history
+ */
+function extractRelevantContext(
+  userContextHistory: string, 
+  taskTitle: string, 
+  selectedSuggestion: string = '',
+  maxChars = 1000
+): string {
+  if (!userContextHistory || userContextHistory.length === 0) {
+    return '';
+  }
+  
+  // Split history into individual entries
+  const entries = userContextHistory.split('\n').filter(entry => entry.trim().length > 0);
+  if (entries.length === 0) {
+    return '';
+  }
+  
+  // 简单实现：选择含有关键词的条目
+  const keywordsSet = new Set<string>([
+    ...taskTitle.toLowerCase().split(/\s+/),
+    ...(selectedSuggestion ? selectedSuggestion.toLowerCase().split(/\s+/) : [])
+  ]);
+  const keywords = Array.from(keywordsSet).filter(word => word.length > 3); // 只使用较长的单词作为关键词
+  
+  // 给每个条目评分，根据它包含的关键词数量
+  const scoredEntries = entries.map(entry => {
+    const lowerEntry = entry.toLowerCase();
+    // 计算分数：找到的关键词数量 + 越新的条目分数越高
+    let score = 0;
+    keywords.forEach(word => {
+      if (lowerEntry.includes(word)) {
+        score += 1;
+      }
+    });
+    
+    // 特定类型的条目加分
+    if (entry.includes('[任务反馈]')) score += 2;
+    if (entry.includes('[任务更新]')) score += 1;
+    if (entry.includes('[新任务]')) score += 1;
+    
+    return { entry, score };
+  });
+  
+  // 根据分数排序，并保留最相关的条目
+  scoredEntries.sort((a, b) => b.score - a.score);
+  
+  // 合并最相关的条目，直到达到最大字符数
+  let relevantContext = '';
+  for (const { entry } of scoredEntries) {
+    if (relevantContext.length + entry.length + 1 > maxChars) {
+      break;
+    }
+    relevantContext += entry + '\n';
+  }
+  
+  return relevantContext;
 }
 
 /**

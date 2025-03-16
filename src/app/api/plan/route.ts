@@ -11,7 +11,9 @@ export async function POST(request: Request) {
       taskTitle, 
       selectedSuggestion, 
       userProfile, 
-      recentFeedback 
+      implicitNeeds,
+      recentFeedback,
+      userContextHistory
     } = await request.json();
     
     if (!taskTitle || !selectedSuggestion) {
@@ -25,7 +27,9 @@ export async function POST(request: Request) {
       taskTitle,
       selectedSuggestion,
       userProfile,
-      recentFeedback
+      implicitNeeds,
+      recentFeedback,
+      userContextHistory
     );
     
     return NextResponse.json(plan);
@@ -45,7 +49,9 @@ async function generateDetailedPlan(
   taskTitle: string,
   selectedSuggestion: string,
   userProfile: any,
-  recentFeedback?: string
+  implicitNeeds?: string[],
+  recentFeedback?: string,
+  userContextHistory?: string
 ): Promise<{ 
   title: string, 
   description: string, 
@@ -53,7 +59,14 @@ async function generateDetailedPlan(
 }> {
   try {
     // Construct the prompt
-    const prompt = constructDetailedPlanPrompt(taskTitle, selectedSuggestion, userProfile, recentFeedback);
+    const prompt = constructPlanPrompt(
+      taskTitle,
+      selectedSuggestion,
+      userProfile,
+      implicitNeeds,
+      recentFeedback,
+      userContextHistory
+    );
     
     // Call DeepSeek API
     const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions', {
@@ -89,7 +102,7 @@ async function generateDetailedPlan(
     }
 
     // Parse the response to extract the detailed plan
-    return parseDetailedPlan(data.choices[0].message.content, taskTitle, selectedSuggestion);
+    return parsePlanResponse(data.choices[0].message.content);
   } catch (error) {
     console.error('Error generating detailed plan:', error);
     
@@ -107,204 +120,228 @@ async function generateDetailedPlan(
 }
 
 /**
- * Construct prompt for generating detailed plan
+ * Construct a prompt for generating a detailed plan
  */
-function constructDetailedPlanPrompt(
+function constructPlanPrompt(
   taskTitle: string,
   selectedSuggestion: string,
   userProfile: any,
-  recentFeedback?: string
+  implicitNeeds?: string[],
+  recentFeedback?: string,
+  userContextHistory?: string
 ): string {
-  let prompt = `请处理任务「${taskTitle}」，基于所选方案：「${selectedSuggestion}」\n\n`;
+  let prompt = `请为任务「${taskTitle}」生成详细计划：\n\n`;
   
-  // Add user profile information
-  prompt += '【用户画像】\n';
-  prompt += '◆ 基础档案：';
-  const basicInfo = [];
-  if (userProfile.age) basicInfo.push(`年龄 ${userProfile.age}`);
-  if (userProfile.occupation) basicInfo.push(`职业 ${userProfile.occupation}`);
-  if (userProfile.location) basicInfo.push(`地理位置 ${userProfile.location}`);
-  if (userProfile.height) basicInfo.push(`身高 ${userProfile.height}`);
-  if (userProfile.weight) basicInfo.push(`体重 ${userProfile.weight}`);
-  prompt += basicInfo.join('、') + '\n';
+  // Add context from the selected suggestion
+  prompt += `选择的建议：${selectedSuggestion}\n\n`;
   
-  // Add ability characteristics
-  prompt += '◆ 能力特征：';
-  const abilities = [];
-  if (userProfile.strengths && userProfile.strengths.length > 0) {
-    abilities.push(`优势 ${userProfile.strengths.join('、')}`);
+  // Add user profile information (simplified)
+  prompt += '【用户信息】\n';
+  const profileInfo = [];
+  if (userProfile.personality && userProfile.personality.length > 0) {
+    profileInfo.push(`性格特点: ${userProfile.personality.join(', ')}`);
   }
-  if (userProfile.weaknesses && userProfile.weaknesses.length > 0) {
-    abilities.push(`短板 ${userProfile.weaknesses.join('、')}`);
+  if (userProfile.interests && userProfile.interests.length > 0) {
+    profileInfo.push(`兴趣爱好: ${userProfile.interests.join(', ')}`);
   }
-  prompt += abilities.join('、') + '\n';
-  
-  // Add historical trajectory
-  prompt += '◆ 历史轨迹：';
-  if (userProfile.history) {
-    prompt += userProfile.history;
-  } else if (recentFeedback) {
-    prompt += recentFeedback;
-  } else {
-    prompt += '无历史记录';
+  if (userProfile.healthConditions && userProfile.healthConditions.length > 0) {
+    profileInfo.push(`健康状况: ${userProfile.healthConditions.join(', ')}`);
   }
-  prompt += '\n\n';
+  prompt += profileInfo.join('\n') + '\n\n';
   
-  // Add task context
-  prompt += '【任务上下文】\n';
-  prompt += `★ 显性需求：${taskTitle}\n`;
-  
-  // Add implicit needs based on goals
-  prompt += '★ 隐性需求：';
-  if (userProfile.goals && userProfile.goals.length > 0) {
-    prompt += userProfile.goals.join('、');
-  } else {
-    prompt += '未明确';
+  // Add implicit needs
+  if (implicitNeeds && implicitNeeds.length > 0) {
+    prompt += `【相关目标】\n${implicitNeeds.join('\n')}\n\n`;
   }
-  prompt += '\n';
   
-  // Add constraints
-  prompt += '★ 约束条件：';
-  const constraints = [];
-  if (userProfile.timeConstraints) constraints.push(`时间 ${userProfile.timeConstraints}`);
-  if (userProfile.resourceConstraints) constraints.push(`资源 ${userProfile.resourceConstraints}`);
-  if (userProfile.restrictions && userProfile.restrictions.length > 0) {
-    constraints.push(`限制 ${userProfile.restrictions.join('、')}`);
+  // Add recent feedback if available
+  if (recentFeedback) {
+    prompt += `【最近反馈】\n${recentFeedback}\n\n`;
   }
-  prompt += constraints.length > 0 ? constraints.join('、') : '无明确约束';
-  prompt += '\n\n';
   
-  // 修改输出要求，使生成的内容更符合app体验
+  // 添加相关的用户上下文历史（如果有）
+  if (userContextHistory && userContextHistory.length > 0) {
+    prompt += `【用户历史上下文】\n${extractRelevantContext(userContextHistory, taskTitle, selectedSuggestion)}\n\n`;
+  }
+  
+  // Request format
   prompt += '【输出要求】\n';
-  prompt += '▸ 输出格式：\n';
-  prompt += '1. 标题：简短直接，不超过15字\n';
-  prompt += '2. 描述：最多50字，只提及核心要点和注意事项\n';
-  prompt += '3. 子任务清单：4-6个，每个不超过15字，必须满足以下要求：\n';
+  prompt += '请生成以下内容：\n';
+  prompt += '1. 标题：任务的简短标题（最多15个字符）\n';
+  prompt += '2. 描述：任务的简短描述（最多50个字符）\n';
+  prompt += '3. 子任务列表：子任务清单：4-6个，每个不超过15字，必须满足以下要求：\n';
   prompt += '   - 只关注当天的任务执行，不要包含长期计划\n';
   prompt += '   - 每个子任务都应该简洁明了，像app的选项一样\n';
   prompt += '   - 不要使用多余的修饰语，直接表达核心动作\n';
   prompt += '   - 不要包含无关的长期目标(如马拉松训练/语言学习等)，除非与当天任务直接相关\n';
   prompt += '   - 避免使用"第一周"、"第二周"等长期规划表述\n';
   
-  prompt += '▸ 子任务格式范例：\n';
-  prompt += '设置6PM提醒\n';
-  prompt += '准备无糖饮料\n';
-  prompt += '记录饥饿感受\n';
-  prompt += '保持水分摄入\n';
+  prompt += '请直接以JSON格式返回，格式如下：\n';
+  prompt += '{\n';
+  prompt += '  "title": "简短标题",\n';
+  prompt += '  "description": "简短描述",\n';
+  prompt += '  "subtasks": [\n';
+  prompt += '    { "id": "ID-1", "title": "第一步", "completed": false },\n';
+  prompt += '    { "id": "ID-2", "title": "第二步", "completed": false },\n';
+  prompt += '    { "id": "ID-3", "title": "第三步", "completed": false }\n';
+  prompt += '  ]\n';
+  prompt += '}\n';
   
   return prompt;
 }
 
 /**
- * Parse detailed plan from DeepSeek API response
+ * Extract relevant context from user history based on task and suggestion
  */
-function parseDetailedPlan(
-  content: string, 
+function extractRelevantContext(
+  userContextHistory: string, 
   taskTitle: string, 
-  selectedSuggestion: string
-): { 
-  title: string, 
-  description: string, 
-  subtasks: { id: string, title: string, completed: boolean }[] 
-} {
+  selectedSuggestion: string,
+  maxChars = 1000
+): string {
+  if (!userContextHistory || userContextHistory.length === 0) {
+    return '';
+  }
+  
+  // Split history into individual entries
+  const entries = userContextHistory.split('\n').filter(entry => entry.trim().length > 0);
+  if (entries.length === 0) {
+    return '';
+  }
+  
+  // 简单实现：选择含有关键词的条目
+  const taskWordsSet = new Set<string>([
+    ...taskTitle.toLowerCase().split(/\s+/),
+    ...selectedSuggestion.toLowerCase().split(/\s+/)
+  ]);
+  const taskWords = Array.from(taskWordsSet).filter(word => word.length > 3); // 只使用较长的单词作为关键词
+  
+  // 给每个条目评分，根据它包含的关键词数量
+  const scoredEntries = entries.map(entry => {
+    const lowerEntry = entry.toLowerCase();
+    // 计算分数：找到的关键词数量 + 越新的条目分数越高
+    let score = 0;
+    taskWords.forEach(word => {
+      if (lowerEntry.includes(word)) {
+        score += 1;
+      }
+    });
+    
+    // 特定类型的条目加分
+    if (entry.includes('[任务反馈]')) score += 2;
+    if (entry.includes('[任务更新]')) score += 1;
+    if (entry.includes('[新任务]')) score += 1;
+    
+    return { entry, score };
+  });
+  
+  // 根据分数排序，并保留最相关的条目
+  scoredEntries.sort((a, b) => b.score - a.score);
+  
+  // 合并最相关的条目，直到达到最大字符数
+  let relevantContext = '';
+  for (const { entry } of scoredEntries) {
+    if (relevantContext.length + entry.length + 1 > maxChars) {
+      break;
+    }
+    relevantContext += entry + '\n';
+  }
+  
+  return relevantContext;
+}
+
+/**
+ * Parse the response from DeepSeek API into a structured plan
+ */
+function parsePlanResponse(content: string): any {
   try {
-    console.log('[API-Plan] 解析原始内容:', content);
+    // 尝试直接解析JSON
+    // 找到JSON开始的位置
+    const jsonStart = content.indexOf('{');
+    const jsonEnd = content.lastIndexOf('}');
     
-    // Extract title
-    let title = taskTitle;
-    const titleMatch = content.match(/##\s*(.*?)(?=\n|$)/);
-    if (titleMatch && titleMatch[1]) {
-      title = titleMatch[1].trim();
-    }
-    
-    // Extract description (including method logic and notes)
-    let description = '';
-    
-    // Extract method logic
-    const logicMatch = content.match(/###\s*方案逻辑\s*([\s\S]*?)(?=###|$)/);
-    if (logicMatch && logicMatch[1]) {
-      description += logicMatch[1].trim();
-    }
-    
-    // Extract notes/risks
-    const notesMatch = content.match(/###\s*注意事项\s*([\s\S]*?)(?=###|$)/);
-    if (notesMatch && notesMatch[1]) {
-      if (description) description += ' ';
-      description += notesMatch[1].trim();
-    }
-    
-    // If no description was extracted, use the selected suggestion
-    if (!description) {
-      description = selectedSuggestion;
-    }
-    
-    // 限制描述长度
-    if (description.length > 100) {
-      description = description.substring(0, 97) + '...';
-    }
-    
-    // Extract subtasks - 简化提取方式，更适合简短的子任务
-    const subtasks: { id: string, title: string, completed: boolean }[] = [];
-    const subtasksListPattern = /###\s*子任务清单\s*([\s\S]*?)(?=###|$)/;
-    const subtasksMatch = content.match(subtasksListPattern);
-    
-    if (subtasksMatch && subtasksMatch[1]) {
-      const subtaskList = subtasksMatch[1].split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        // 简化子任务内容，移除前缀和一些冗余标记
-        .map(line => line.replace(/^[-*\d\.\[\]]\s*(\[.\])?\s*/, '').trim())
-        .filter(line => line.length > 0 && line.length <= 30);
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      const jsonContent = content.substring(jsonStart, jsonEnd + 1);
+      const parsedPlan = JSON.parse(jsonContent);
       
-      // 只保留4-6个子任务
-      const maxTasks = Math.min(6, subtaskList.length);
-      for (let i = 0; i < maxTasks; i++) {
-        subtasks.push({
-          id: `subtask-${Date.now()}-${i}`,
-          title: subtaskList[i],
+      // 确保有ID
+      if (parsedPlan.subtasks && Array.isArray(parsedPlan.subtasks)) {
+        parsedPlan.subtasks = parsedPlan.subtasks.map((subtask: any, index: number) => ({
+          ...subtask,
+          id: subtask.id || `subtask-${Date.now()}-${index + 1}`,
           completed: false
-        });
+        }));
+      }
+      
+      return parsedPlan;
+    }
+    
+    // 如果无法解析JSON，尝试提取信息
+    const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    // 简单解析标题、描述和子任务
+    let title = '';
+    let description = '';
+    const subtasks = [];
+    
+    // 查找标题和描述
+    for (const line of lines) {
+      if (line.toLowerCase().includes('标题') || line.toLowerCase().includes('title')) {
+        title = line.split(/[:：]/).pop()?.trim() || '';
+        continue;
+      }
+      
+      if (line.toLowerCase().includes('描述') || line.toLowerCase().includes('description')) {
+        description = line.split(/[:：]/).pop()?.trim() || '';
+        continue;
+      }
+      
+      // 查找子任务
+      if (line.match(/^\d+[\.\)]\s/) || line.match(/^[\-\*]\s/)) {
+        const taskText = line.replace(/^\d+[\.\)]\s/, '').replace(/^[\-\*]\s/, '').trim();
+        if (taskText) {
+          subtasks.push({
+            id: `subtask-${Date.now()}-${subtasks.length + 1}`,
+            title: taskText,
+            completed: false
+          });
+        }
       }
     }
     
-    console.log('[API-Plan] 提取结果:', { title, description: description.substring(0, 30) + '...', subtasksCount: subtasks.length });
+    // 如果未找到标题，使用任务标题
+    if (!title) {
+      title = "详细计划";
+    }
     
-    // 如果没有提取到子任务，创建基本任务
-    if (subtasks.length === 0) {
-      const defaultSubtasks = [
-        '设置6PM提醒',
-        '准备无糖饮料',
-        '记录饥饿感受',
-        '保持水分摄入'
-      ];
-      
-      defaultSubtasks.forEach((task, index) => {
-        subtasks.push({
-          id: `subtask-${Date.now()}-${index}`,
-          title: task,
-          completed: false
-        });
-      });
+    // 如果未找到描述，使用前两个子任务
+    if (!description && subtasks.length >= 2) {
+      description = `包含 ${subtasks.length} 个步骤的计划`;
+    } else if (!description) {
+      description = "分步骤完成任务";
     }
     
     return {
       title,
       description,
-      subtasks
+      subtasks: subtasks.length > 0 ? subtasks : [
+        { id: `subtask-${Date.now()}-1`, title: '准备工作', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '执行第一步', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '完成任务', completed: false }
+      ]
     };
   } catch (error) {
-    console.error('[API-Plan] 解析详细计划时出错:', error);
+    console.error('[API-Plan] 解析计划响应时出错:', error);
     
-    // Fallback plan in case of API failure
+    // 提供默认计划
     return {
-      title: taskTitle,
-      description: selectedSuggestion,
+      title: '详细计划',
+      description: '分步骤完成任务',
       subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '设置提醒', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '准备应对策略', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '记录执行情况', completed: false },
-        { id: `subtask-${Date.now()}-4`, title: '调整时间安排', completed: false }
+        { id: `subtask-${Date.now()}-1`, title: '准备工作', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '执行任务', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '总结完成', completed: false }
       ]
     };
   }
-} 
+}

@@ -83,11 +83,15 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       isLoading = true;
       
       try {
+        // 获取用户上下文历史
+        const relevantContext = userProfile.userContextHistory || '';
+        
         console.log('开始加载任务建议: ', {
           taskTitle: task.title,
           userProfile: userProfile,
           implicitNeeds: implicitNeeds,
-          recentFeedback
+          recentFeedback,
+          contextHistoryLength: relevantContext.length
         });
         
         // Call the API route
@@ -100,7 +104,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
             taskTitle: task.title,
             userProfile,
             implicitNeeds, // 添加从活跃目标获取的隐性需求
-            recentFeedback
+            recentFeedback,
+            userContextHistory: relevantContext // 传递用户上下文历史
           })
         });
         
@@ -172,10 +177,14 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
       }
       
+      // 获取用户上下文历史
+      const relevantContext = userProfile.userContextHistory || '';
+      
       console.log('开始加载详细计划: ', {
         taskTitle: task.title,
         selectedSuggestion: suggestion,
-        implicitNeeds: implicitNeeds // 同样传递活跃目标作为隐性需求
+        implicitNeeds: implicitNeeds, // 同样传递活跃目标作为隐性需求
+        contextHistoryLength: relevantContext.length // 记录上下文长度但不打印全部内容
       });
       
       // Call the API route
@@ -189,7 +198,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           selectedSuggestion: suggestion,
           userProfile,
           implicitNeeds, // 添加从活跃目标获取的隐性需求
-          recentFeedback
+          recentFeedback,
+          userContextHistory: relevantContext // 传递用户上下文历史
         })
       });
       
