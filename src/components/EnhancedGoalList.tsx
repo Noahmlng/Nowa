@@ -268,6 +268,15 @@ export default function EnhancedGoalList() {
       if (!response.ok) throw new Error('Failed to analyze goal');
       
       const analysis = await response.json();
+      
+      // 确保每个问题都有text属性
+      if (analysis.suggestedQuestions) {
+        analysis.suggestedQuestions = analysis.suggestedQuestions.map((q: any) => ({
+          ...q,
+          text: q.question // 将question字段的值复制到text字段
+        }));
+      }
+      
       setGoalAnalysis(analysis);
       
       // 如果完整度较低，进入澄清阶段
@@ -1287,13 +1296,13 @@ ${continuedFeedback}
                                     // 选择选项后直接生成任务
                                     setNewGoal(prev => ({
                                       ...prev,
-                                      tasks: option.tasks.map((task, taskIndex) => ({
+                                      tasks: option.tasks?.map((task, taskIndex) => ({
                                         id: `task-${Date.now()}-${taskIndex}`,
                                         title: task.title,
                                         timeline: task.timeline,
-                                        priority: task.priority,
+                                        priority: task.priority || 'medium',
                                         completed: false
-                                      }))
+                                      })) || []
                                     }));
                                     // 进入任务编辑阶段
                                     setCreationStep('taskGeneration');
@@ -1350,9 +1359,9 @@ ${continuedFeedback}
                                   id: `task-${Date.now()}-${index}`,
                                   title: task.title,
                                   timeline: task.timeline,
-                                  priority: task.priority,
+                                  priority: task.priority || 'medium',
                                   completed: false
-                                }))
+                                })) || []
                               }));
                               // 进入任务编辑阶段
                               setCreationStep('taskGeneration');
@@ -1411,13 +1420,13 @@ ${continuedFeedback}
                               // 选择选项后直接生成任务
                               setNewGoal(prev => ({
                                 ...prev,
-                                tasks: option.tasks.map((task, taskIndex) => ({
+                                tasks: option.tasks?.map((task, taskIndex) => ({
                                   id: `task-${Date.now()}-${taskIndex}`,
                                   title: task.title,
                                   timeline: task.timeline,
-                                  priority: task.priority,
+                                  priority: task.priority || 'medium',
                                   completed: false
-                                }))
+                                })) || []
                               }));
                               // 进入任务编辑阶段
                               setCreationStep('taskGeneration');
