@@ -1,109 +1,72 @@
-# Nowa - Where Productivity Meets Purpose
+# Nowa - Intelligent Progress Architecture
 
-**For the modern achiever who values progress over checkboxes**  
-In a world where 72% of professionals feel overwhelmed by their own to-do lists, Nowa redefines what a productivity tool can be. We don't just manage tasks – we cultivate meaningful momentum.
+**For professionals who want their tools to understand context, not just capture tasks**  
+While 89% of productivity tools focus on completion rates, Nowa measures what matters: meaningful progress towards what you value most.
 
-## The Anatomy of Modern Achievement
-### 1. Neural Task Weaving™
-- **Dynamic Priority Mapping**: Tasks automatically cluster around your current focus areas
-- **Biological Sync**: Learns your energy patterns to suggest deep work windows
-- **Context Carryover**: Unfinished tasks intelligently reprioritize based on new inputs
+## Core Value Propositions
 
-### 2. Legacy Building System
-- **Goal DNA**: Each objective gets broken into 7 actionable dimensions
-- **Progress Compound Interest**: Small wins automatically contribute to bigger goals
-- **Milestone Memories**: Capture reflection notes at each achievement point
+### 1. Context-Aware Task Management
+- **Priority Intelligence**: Auto-groups tasks by current projects and energy levels
+- **Time Sensitivity Detection**: Flags time-dependent tasks with smart reminders
+- **Progress Carryover**: Unfinished items get rescheduled with adjusted priority
 
-### 3. Adaptive Intelligence
-- **Failure Forecast**: Predicts potential roadblocks with 89% accuracy
-- **Recovery Recipes**: Suggests micro-adjustments when tasks stall
-- **Productivity Personality**: Develops unique workflow recommendations
+### 2. Goal-Task Alignment System
+- **Objective Breakdown**: Deconstructs goals into executable phases
+- **Impact Tracking**: Visualizes how daily tasks contribute to long-term targets
+- **Milestone Mapping**: Creates checkpoints with reflection prompts
+
+### 3. Adaptive Workflow Engine
+- **Pattern Recognition**: Learns from your completion habits and preferences
+- **Obstacle Prediction**: Alerts potential blockers with mitigation strategies
+- **Personalized Suggestions**: Recommends workflow adjustments based on your style
 
 ---
 
-# Nowa - 在数字洪流中锚定价值
+# Nowa - 智能进度架构
 
-**为不甘于清单奴隶的创造者而生**  
-当68%的中国职场人陷入「完成焦虑」，Nowa重新定义生产力工具——我们管理的不只是任务，而是值得骄傲的人生轨迹。
+**为需要上下文感知，而不仅是任务记录的专业人士打造**  
+当89%的生产力工具还在关注完成率时，Nowa专注衡量真正重要的：对核心价值的实质推进。
 
-## 新时代成就者的三重修炼
-### 1. 智能任务织网™
-- **动态优先级图谱**：任务自动围绕当前重心智能聚类
-- **生物钟同步**：学习你的精力曲线，推荐深度工作窗口
-- **情境续传**：未完成任务根据新输入重新校准优先级
+## 核心价值维度
 
-### 2. 价值沉淀系统
-- **目标基因解析**：每个目标分解为7个可行动维度
-- **进度复利效应**：小胜利自动累积助推大目标
-- **里程碑记忆库**：在每个成就点捕捉思考火花
+### 1. 情境感知任务管理
+- **智能优先级**：按当前项目与精力状态自动任务分组
+- **时间敏感度识别**：标记时效性任务并智能提醒
+- **进度结转**：未完成事项自动重新排期并调整优先级
 
-### 3. 自适应智能体
-- **风险预见**：以89%准确率预测潜在障碍
-- **修复配方**：任务停滞时提供微调方案
-- **生产力人格**：生成个性化工作流建议
+### 2. 目标-任务对齐系统
+- **目标解构**：将大目标分解为可执行的阶段
+- **影响追踪**：可视化日常任务对长期目标的贡献度
+- **里程碑规划**：创建带反思提示的关键节点
 
-## 本土创新者的真实回响
-期待你的声音！
+### 3. 自适应工作流引擎
+- **模式识别**：从您的完成习惯中学习工作偏好
+- **障碍预测**：预警潜在瓶颈并提供应对策略
+- **个性化建议**：根据工作风格推荐流程优化方案
 
-"这套系统像数字化的苏格拉底，不断用关键提问帮我们厘清商业本质，初创团队必备。"  
-– 罗先生
-
-<!-- TECHNICAL SECTION -->
 ---
 
-## Getting Started / 快速开始
+## Technical Implementation | 技术实现
 
-### Prerequisites | 环境要求
-- Node.js (v14+)
-- npm/yarn
-
-```bash
-# Clone & Install
-git clone https://github.com/diangao/Nowa.git
-cd nowa && npm install
-
-# Start Journey
-npm run dev
-```
-
-## Architecture Overview | 技术架构
-
-```
+### Core Architecture
+```text
 nowa/
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx    # Root layout component
-│   │   ├── page.tsx      # Home page component
-│   │   └── globals.css   # Global styles
-│   ├── components/
-│   │   ├── GoalList.tsx  # Goal list component
-│   │   ├── Sidebar.tsx   # Sidebar navigation component
-│   │   ├── TaskDetail.tsx # Task detail modal component
-│   │   └── TaskList.tsx  # Task list component
+│   ├── app/            # 应用路由与核心布局
+│   ├── components/     # 交互组件库
+│   │   ├── GoalEngine/ # 目标解析引擎
+│   │   └── TaskMatrix/ # 任务关系图谱
 │   └── store/
-│       └── store.ts      # Zustand store for state management
-├── public/              # Static assets
-├── package.json         # Project dependencies
-└── README.md            # Project documentation
+│       └── context-aware.ts # 情境感知状态管理
 ```
 
-## Technologies Used
+### Technology Stack
+- **Next.js 14**: App Router架构实现混合渲染
+- **Zustand 4.0**: 支持上下文感知的状态管理
+- **date-fns 3.0**: 跨时区时间处理方案
+- **Tailwind 3.4**: 原子化样式系统
 
-- **Next.js**: React framework for server-side rendering and static site generation
-- **TypeScript**: Type-safe JavaScript
-- **Tailwind CSS**: Utility-first CSS framework
-- **Zustand**: State management
-- **date-fns**: Date utility library
-- **Lucide React**: Icon library
+---
 
-## Future Enhancements
-
-- Voice feedback for tasks
-- AI-powered task suggestions and adjustments
-- Daily summary reports
-- Email notifications
-- Integration with external calendars
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+**License**: MIT  
+**Documentation**: [docs.nowa.com](https://docs.nowa.com)
