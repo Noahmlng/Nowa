@@ -65,6 +65,14 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         task.title.toLowerCase().includes('run') || 
         task.title.toLowerCase().includes('training')) {
       recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
+      console.log('[TaskSuggestions] 使用模拟反馈:', recentFeedback);
+    } else if (task.feedback && task.feedback.length > 0) {
+      // 使用任务的实际反馈（如果有）
+      const latestFeedback = task.feedback[task.feedback.length - 1];
+      recentFeedback = latestFeedback.text;
+      console.log('[TaskSuggestions] 使用实际任务反馈:', recentFeedback);
+    } else {
+      console.log('[TaskSuggestions] 任务没有反馈数据');
     }
     
     // 标记组件是否已卸载，防止在组件卸载后设置状态
@@ -94,19 +102,34 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           contextHistoryLength: relevantContext.length
         });
         
-        // Call the API route
+        // 提取用户所有的活跃目标作为隐性需求
+        const activeGoals = goals
+          .filter(g => g.status === 'active')
+          .map(g => g.title);
+        
+        // 记录将要发送到API的所有参数
+        console.log('[TaskSuggestions] 发送到API的参数:', {
+          taskTitle: task.title,
+          userProfile,
+          implicitNeeds: activeGoals,
+          recentFeedback,
+          hasUserContextHistory: !!relevantContext,
+          userContextHistoryLength: relevantContext.length
+        });
+        
+        // 调用建议API
         const response = await fetch('/api/suggestions', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             taskTitle: task.title,
             userProfile,
-            implicitNeeds, // 添加从活跃目标获取的隐性需求
+            implicitNeeds: activeGoals,
             recentFeedback,
-            userContextHistory: relevantContext // 传递用户上下文历史
-          })
+            userContextHistory: relevantContext
+          }),
         });
         
         console.log('API响应状态: ', response.status, response.statusText);

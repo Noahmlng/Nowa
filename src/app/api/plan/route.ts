@@ -58,6 +58,15 @@ async function generateDetailedPlan(
   subtasks: { id: string, title: string, completed: boolean }[] 
 }> {
   try {
+    // 添加日志显示接收到的反馈
+    console.log('[API-Plan] 收到的反馈参数:', {
+      taskTitle,
+      selectedSuggestion,
+      recentFeedback: recentFeedback ? `${recentFeedback.substring(0, 100)}${recentFeedback.length > 100 ? '...' : ''}` : '无反馈',
+      hasUserContextHistory: !!userContextHistory,
+      userContextHistoryLength: userContextHistory?.length || 0
+    });
+    
     // Construct the prompt
     const prompt = constructPlanPrompt(
       taskTitle,
@@ -245,6 +254,9 @@ function constructPlanPrompt(
   // Add recent feedback if available
   if (recentFeedback) {
     prompt += `【最近反馈】\n${recentFeedback}\n\n`;
+    console.log('[API-Plan] 添加最近反馈到提示:', recentFeedback.substring(0, 100) + (recentFeedback.length > 100 ? '...' : ''));
+  } else {
+    console.log('[API-Plan] 没有最近反馈可添加');
   }
   
   // 添加相关的用户上下文历史（如果有）

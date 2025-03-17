@@ -415,6 +415,8 @@ export const useAppStore = create<AppState>()(
               const contextUpdate = `[任务反馈] 任务ID: ${id}, 反馈: ${feedback}`;
               get().addToUserContextHistory(contextUpdate);
               
+              console.log('[Store] 添加任务反馈:', { taskId: id, feedback: feedbackItem, contextUpdate });
+              
               return {
                 ...t,
                 feedback: t.feedback ? [...t.feedback, feedbackItem] : [feedbackItem]

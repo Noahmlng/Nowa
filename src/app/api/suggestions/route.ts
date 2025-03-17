@@ -39,6 +39,14 @@ async function generateSuggestions(
   userContextHistory?: string
 ): Promise<string[]> {
   try {
+    // 添加日志显示接收到的反馈
+    console.log('[API-Suggestions] 收到的反馈参数:', {
+      taskTitle,
+      recentFeedback: recentFeedback ? `${recentFeedback.substring(0, 100)}${recentFeedback.length > 100 ? '...' : ''}` : '无反馈',
+      hasUserContextHistory: !!userContextHistory,
+      userContextHistoryLength: userContextHistory?.length || 0
+    });
+
     // Construct the prompt
     const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
     console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
@@ -266,10 +274,13 @@ function constructSuggestionPrompt(
   prompt += '◆ 历史轨迹：';
   if (userProfile.history) {
     prompt += userProfile.history;
+    console.log('[API-Suggestions] 使用用户历史作为历史轨迹:', userProfile.history.substring(0, 100) + '...');
   } else if (recentFeedback) {
     prompt += recentFeedback;
+    console.log('[API-Suggestions] 使用最近反馈作为历史轨迹:', recentFeedback.substring(0, 100) + '...');
   } else {
     prompt += '无历史记录';
+    console.log('[API-Suggestions] 历史轨迹为空');
   }
   prompt += '\n\n';
   
