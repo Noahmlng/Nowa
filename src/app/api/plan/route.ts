@@ -68,55 +68,143 @@ async function generateDetailedPlan(
       userContextHistory
     );
     
-    // Call DeepSeek API
-    const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.8,
-        top_p: 0.7,
-        max_tokens: 1000,
-        presence_penalty: 0.2
-      })
-    });
-
-    const data = await response.json();
+    // 确定使用哪个模型
+    const preferredModel = userProfile.preferredModel || 'gpt-4o';
+    console.log('[API-Plan] 使用模型:', preferredModel);
     
-    if (!response.ok) {
-      console.error('Error from DeepSeek API:', data);
-      throw new Error('Failed to generate detailed plan');
+    // 根据用户偏好选择不同的API配置
+    let responseContent;
+    if (preferredModel === 'deepseek-r1') {
+      responseContent = await callDeepseekAPI(prompt);
+    } else {
+      responseContent = await callOpenAIAPI(prompt);
     }
-
-    // Parse the response to extract the detailed plan
-    return parsePlanResponse(data.choices[0].message.content);
-  } catch (error) {
-    console.error('Error generating detailed plan:', error);
     
-    // Fallback plan in case of API failure
+    // 解析响应
+    return parsePlanResponse(responseContent);
+  } catch (error) {
+    console.error('Error in generateDetailedPlan:', error);
+    // 提供默认回退计划
     return {
-      title: taskTitle,
-      description: `${selectedSuggestion}\n\n根据您的偏好和目标生成的计划。`,
+      title: `${taskTitle} 计划`,
+      description: `基于你的选择「${selectedSuggestion}」，这是一个简化的计划。`,
       subtasks: [
-        { id: `subtask-${Date.now()}-1`, title: '热身 5 分钟', completed: false },
-        { id: `subtask-${Date.now()}-2`, title: '完成主要活动（20 分钟）', completed: false },
-        { id: `subtask-${Date.now()}-3`, title: '放松和拉伸（5 分钟）', completed: false }
+        { id: `subtask-${Date.now()}-1`, title: '第 1 步: 开始', completed: false },
+        { id: `subtask-${Date.now()}-2`, title: '第 2 步: 执行', completed: false },
+        { id: `subtask-${Date.now()}-3`, title: '第 3 步: 完成', completed: false }
       ]
     };
   }
+}
+
+/**
+ * 调用 DeepSeek API
+ */
+async function callDeepseekAPI(prompt: string): Promise<string> {
+  // Call DeepSeek API
+  const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+  
+  console.log('[API-Plan] DeepSeek 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey
+  });
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的行动项将采用：**【任务类别】X分钟 | 具体行动（量化标准）**\n- 任务类别如【写作】【研究】【练习】【优化】【整理】等\n- 包含每个行动项的预计时长\n- 具体行动需包含量化指标，描述具体可执行内容'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.8,
+      top_p: 0.7,
+      max_tokens: 1000,
+      presence_penalty: 0.2
+    })
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('Error from DeepSeek API:', data);
+    throw new Error(`Failed to generate plan: ${response.status} ${response.statusText}`);
+  }
+  
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('Invalid response format from DeepSeek API:', data);
+    throw new Error('Invalid response format from DeepSeek API');
+  }
+  
+  return data.choices[0].message.content;
+}
+
+/**
+ * 调用 OpenAI API
+ */
+async function callOpenAIAPI(prompt: string): Promise<string> {
+  // Call OpenAI API
+  const apiUrl = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = 'gpt-4o';
+  
+  console.log('[API-Plan] OpenAI 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey
+  });
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的行动项将采用：**【任务类别】X分钟 | 具体行动（量化标准）**\n- 任务类别如【写作】【研究】【练习】【优化】【整理】等\n- 包含每个行动项的预计时长\n- 具体行动需包含量化指标，描述具体可执行内容'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.8,
+      top_p: 0.7,
+      max_tokens: 1000,
+      presence_penalty: 0.2
+    })
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('Error from OpenAI API:', data);
+    throw new Error(`Failed to generate plan: ${response.status} ${response.statusText}`);
+  }
+  
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('Invalid response format from OpenAI API:', data);
+    throw new Error('Invalid response format from OpenAI API');
+  }
+  
+  return data.choices[0].message.content;
 }
 
 /**
@@ -164,16 +252,17 @@ function constructPlanPrompt(
     prompt += `【用户历史上下文】\n${extractRelevantContext(userContextHistory, taskTitle, selectedSuggestion)}\n\n`;
   }
   
-  // Request format
+  // 更新输出要求为新格式
   prompt += '【输出要求】\n';
-  prompt += '请生成以下内容：\n';
-  prompt += '1. 标题：任务的简短标题（最多15个字符）\n';
-  prompt += '2. 描述：任务的简短描述（最多50个字符）\n';
-  prompt += '3. 子任务列表：子任务清单：4-6个，每个不超过15字，必须满足以下要求：\n';
+  prompt += '请为任务生成以下内容：\n';
+  prompt += '1. 标题：任务的简短标题（最多12个字符）\n';
+  prompt += '2. 描述：任务的简短描述（最多40个字符）\n';
+  prompt += '3. 子任务清单：4-6个行动项，必须满足以下格式：\n';
+  prompt += '   **【任务类别】X分钟 | 具体行动（量化标准）**\n';
+  prompt += '   - 任务类别：如【写作】【研究】【练习】【优化】【整理】等\n';
+  prompt += '   - 时间：每个任务的预计时长\n';
+  prompt += '   - 具体行动：用量化指标描述可执行内容\n';
   prompt += '   - 只关注当天的任务执行，不要包含长期计划\n';
-  prompt += '   - 每个子任务都应该简洁明了，像app的选项一样\n';
-  prompt += '   - 不要使用多余的修饰语，直接表达核心动作\n';
-  prompt += '   - 不要包含无关的长期目标(如马拉松训练/语言学习等)，除非与当天任务直接相关\n';
   prompt += '   - 避免使用"第一周"、"第二周"等长期规划表述\n';
   
   prompt += '请直接以JSON格式返回，格式如下：\n';
@@ -181,9 +270,9 @@ function constructPlanPrompt(
   prompt += '  "title": "简短标题",\n';
   prompt += '  "description": "简短描述",\n';
   prompt += '  "subtasks": [\n';
-  prompt += '    { "id": "ID-1", "title": "第一步", "completed": false },\n';
-  prompt += '    { "id": "ID-2", "title": "第二步", "completed": false },\n';
-  prompt += '    { "id": "ID-3", "title": "第三步", "completed": false }\n';
+  prompt += '    { "id": "ID-1", "title": "【任务类别】X分钟 | 具体行动（量化标准）", "completed": false },\n';
+  prompt += '    { "id": "ID-2", "title": "【任务类别】X分钟 | 具体行动（量化标准）", "completed": false },\n';
+  prompt += '    { "id": "ID-3", "title": "【任务类别】X分钟 | 具体行动（量化标准）", "completed": false }\n';
   prompt += '  ]\n';
   prompt += '}\n';
   
@@ -296,9 +385,17 @@ function parsePlanResponse(content: string): any {
         continue;
       }
       
-      // 查找子任务
-      if (line.match(/^\d+[\.\)]\s/) || line.match(/^[\-\*]\s/)) {
-        const taskText = line.replace(/^\d+[\.\)]\s/, '').replace(/^[\-\*]\s/, '').trim();
+      // 查找子任务 - 匹配新格式【任务类别】X分钟 | 具体行动（量化标准）
+      if (line.match(/【.*?】\d+分钟\s*\|\s*.*?（.*?）/) || 
+          line.match(/^\d+[\.\)]\s/) || 
+          line.match(/^[\-\*]\s/)) {
+        
+        let taskText = line;
+        // 如果有编号或列表符号，去掉
+        if (line.match(/^\d+[\.\)]\s/) || line.match(/^[\-\*]\s/)) {
+          taskText = line.replace(/^\d+[\.\)]\s/, '').replace(/^[\-\*]\s/, '').trim();
+        }
+        
         if (taskText) {
           subtasks.push({
             id: `subtask-${Date.now()}-${subtasks.length + 1}`,

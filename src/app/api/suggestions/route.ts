@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 }
 
 /**
- * Generate task suggestions using DeepSeek API
+ * Generate task suggestions using the selected AI model
  */
 async function generateSuggestions(
   taskTitle: string,
@@ -43,67 +43,20 @@ async function generateSuggestions(
     const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
     console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
     
-    // 请求配置
-    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-
-    console.log('[API-Suggestions] 请求配置:', { 
-      apiUrl, 
-      model, 
-      apiKeyProvided: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0
-    });
+    // 确定使用哪个模型
+    const preferredModel = userProfile.preferredModel || 'gpt-4o';
+    console.log('[API-Suggestions] 使用模型:', preferredModel);
     
-    // Call DeepSeek API
-    const requestBody = {
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【交互协议】  \n1. 提案必须包含：  \n   - 风险评估（使用❗️分级标记）  \n   - 领域交叉建议（如「学习计划与生物钟匹配度」）  \n   - 3种可选路径（保守/平衡/激进策略）  \n2. 使用类比手法解释专业概念（如「这个学习计划像金字塔，基础层是...」）'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      top_p: 0.7,
-      max_tokens: 800,
-      presence_penalty: 0.2
-    };
-    
-    console.log('[API-Suggestions] 发送请求...');
-    const startTime = Date.now();
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const responseTime = Date.now() - startTime;
-    console.log(`[API-Suggestions] 收到响应: 状态=${response.status}, 耗时=${responseTime}ms`);
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('[API-Suggestions] DeepSeek API 错误:', data);
-      throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+    // 根据用户偏好选择不同的API配置
+    let apiResponse;
+    if (preferredModel === 'deepseek-r1') {
+      apiResponse = await callDeepseekAPI(prompt);
+    } else {
+      apiResponse = await callOpenAIAPI(prompt);
     }
-
-    console.log('[API-Suggestions] 解析响应数据...');
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('[API-Suggestions] 返回的数据格式不正确:', data);
-      throw new Error('Invalid response format from DeepSeek API');
-    }
-
+    
     // Parse the response to extract suggestions
-    const suggestions = parseSuggestions(data.choices[0].message.content, taskTitle);
+    const suggestions = parseSuggestions(apiResponse, taskTitle);
     console.log('[API-Suggestions] 解析后的建议:', suggestions);
     
     return suggestions;
@@ -112,6 +65,136 @@ async function generateSuggestions(
     // Fallback suggestions
     return getDefaultSuggestions(taskTitle);
   }
+}
+
+/**
+ * 调用 DeepSeek API
+ */
+async function callDeepseekAPI(prompt: string): Promise<string> {
+  // 请求配置
+  const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+  console.log('[API-Suggestions] DeepSeek 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey,
+    apiKeyLength: apiKey ? apiKey.length : 0
+  });
+  
+  // Call DeepSeek API
+  const requestBody = {
+    model: model,
+    messages: [
+      {
+        role: 'system',
+        content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的任务提案将采用：**任务名称（括号里简要说明核心原因/策略）**\n- 任务名称要简明扼要\n- 括号内需提供任务的关键背景，说明为什么要做这个任务\n- 不同任务的提案需要有差异化侧重点'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.7,
+    top_p: 0.7,
+    max_tokens: 800,
+    presence_penalty: 0.2
+  };
+  
+  console.log('[API-Suggestions] 发送 DeepSeek 请求...');
+  const startTime = Date.now();
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseTime = Date.now() - startTime;
+  console.log(`[API-Suggestions] 收到 DeepSeek 响应: 状态=${response.status}, 耗时=${responseTime}ms`);
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('[API-Suggestions] DeepSeek API 错误:', data);
+    throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('[API-Suggestions] DeepSeek 返回的数据格式不正确:', data);
+    throw new Error('Invalid response format from DeepSeek API');
+  }
+
+  return data.choices[0].message.content;
+}
+
+/**
+ * 调用 OpenAI API
+ */
+async function callOpenAIAPI(prompt: string): Promise<string> {
+  // 请求配置
+  const apiUrl = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = 'gpt-4o';
+
+  console.log('[API-Suggestions] OpenAI 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey,
+    apiKeyLength: apiKey ? apiKey.length : 0
+  });
+  
+  // Call OpenAI API
+  const requestBody = {
+    model: model,
+    messages: [
+      {
+        role: 'system',
+        content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的任务提案将采用：**任务名称（括号里简要说明核心原因/策略）**\n- 任务名称要简明扼要\n- 括号内需提供任务的关键背景，说明为什么要做这个任务\n- 不同任务的提案需要有差异化侧重点'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.7,
+    top_p: 0.7,
+    max_tokens: 800,
+    presence_penalty: 0.2
+  };
+  
+  console.log('[API-Suggestions] 发送 OpenAI 请求...');
+  const startTime = Date.now();
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseTime = Date.now() - startTime;
+  console.log(`[API-Suggestions] 收到 OpenAI 响应: 状态=${response.status}, 耗时=${responseTime}ms`);
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('[API-Suggestions] OpenAI API 错误:', data);
+    throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('[API-Suggestions] OpenAI 返回的数据格式不正确:', data);
+    throw new Error('Invalid response format from OpenAI API');
+  }
+
+  return data.choices[0].message.content;
 }
 
 /**
@@ -234,7 +317,7 @@ function constructSuggestionPrompt(
     }
   }
   
-  // 修改输出要求为同一维度下的不同选项
+  // 修改输出要求为新格式
   prompt += '【输出要求】\n';
   prompt += '1. 分析任务，确定对这个任务最重要的一个核心维度\n';
   prompt += '2. 在该维度下，提供三个不同的具体选项\n';
@@ -248,23 +331,18 @@ function constructSuggestionPrompt(
   prompt += '   - 互相排他（用户只能选择其中一个）\n';
   prompt += '   - 考虑用户情况和偏好\n';
   prompt += '   - 可能与用户的隐性需求/长期目标保持一致\n';
-  prompt += '5. 直接输出三行文本，每行一个选项，无需额外解释\n';
-  prompt += '6. 示例输出格式：\n';
-  
-  // 根据任务类型提供适当的示例
-  if (taskTitle.includes('运动') || taskTitle.includes('锻炼') || taskTitle.includes('有氧')) {
-    // 运动类型选项示例
-    prompt += '跳绳\n慢跑\n室内单车\n';
-  } else if (taskTitle.includes('6pm') || taskTitle.includes('饮食') || taskTitle.includes('禁食')) {
-    // 饮食管理方式选项
-    prompt += '喝水缓解饥饿\n嚼无糖口香糖\n准备低热量蔬菜\n';
-  } else if (taskTitle.includes('学习') || taskTitle.includes('读书')) {
-    // 学习方法选项
-    prompt += '番茄工作法\n闪卡记忆\n思维导图\n';
-  } else {
-    // 通用选项
-    prompt += '选项A\n选项B\n选项C\n';
-  }
+  prompt += '请按照以下格式提供三个不同的任务提案：\n';
+  prompt += '1. **任务名称（括号里简要说明核心原因/策略）**\n';
+  prompt += '2. **任务名称（括号里简要说明核心原因/策略）**\n';
+  prompt += '3. **任务名称（括号里简要说明核心原因/策略）**\n\n';
+  prompt += `每个提案必须：\n`;
+  prompt += `- 与当前任务「${taskTitle}」直接相关\n`;
+  prompt += '- 任务名称简明扼要，不超过8个字\n';
+  prompt += '- 括号内提供关键背景或策略，不超过15个字\n';
+  prompt += '- 有明确的差异化侧重点\n';
+  prompt += '- 考虑用户情况和偏好\n';
+  prompt += '- 与用户的隐性需求/长期目标保持一致\n';
+  prompt += '直接输出三行提案，每行一个，无需额外解释\n';
   
   return prompt;
 }
@@ -336,32 +414,29 @@ function parseSuggestions(content: string, taskTitle: string): string[] {
   try {
     console.log('[API-Suggestions] 原始内容:', content);
     
-    // 简化解析，只提取简短的选项
+    // 解析新格式的任务提案
     const lines = content.split('\n')
       .map(line => line.trim())
-      .filter(line => line.length > 0 && line.length <= 12) // 控制长度更严格
-      // 移除任何行首的标记、序号等
-      .map(line => line.replace(/^([0-9]+\.|\*|\-|>|#|【|】)\s*/, ''))
-      .map(line => line.replace(/^\*\*|\*\*$/g, ''))
-      // 过滤掉空行、太短的行、包含标点的行
-      .filter(line => line.length >= 2 && 
-                      !line.includes(':') && 
-                      !line.includes('：') &&
-                      !line.includes('维度') &&
-                      !line.includes('选项') &&
-                      !line.includes('建议'));
+      .filter(line => line.length > 0) 
+      .filter(line => line.includes('**') && (line.includes('（') || line.includes('(')));
     
-    console.log('[API-Suggestions] 清理后的行:', lines);
+    console.log('[API-Suggestions] 提取的提案行:', lines);
     
-    // 提取最多3个简洁选项
+    // 处理匹配的行
     const suggestions: string[] = [];
     for (let i = 0; i < Math.min(3, lines.length); i++) {
-      suggestions.push(lines[i]);
+      // 尝试提取格式化的内容
+      const match = lines[i].match(/\*\*([^（\(]*)[（\(](.*?)[）\)]/) || lines[i].match(/([^（\(]*)[（\(](.*?)[）\)]/);
+      if (match && match.length >= 3) {
+        suggestions.push(`${match[1].trim()}（${match[2].trim()}）`);
+      } else {
+        // 如果格式不匹配，使用整行
+        suggestions.push(lines[i].replace(/\*\*/g, '').trim());
+      }
     }
     
-    // 补充不足的选项（针对任务类型）
+    // 补充不足的选项
     const defaultSuggestions = getDefaultSuggestions(taskTitle);
-    
     while (suggestions.length < 3) {
       suggestions.push(defaultSuggestions[suggestions.length % defaultSuggestions.length]);
     }

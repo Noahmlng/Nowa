@@ -21,6 +21,22 @@ interface UserProfile {
   goals?: string[];                                // User's personal goals
   notes?: string;                                  // Additional notes
   userContextHistory?: string;                     // 累积式用户上下文历史
+  preferredModel?: 'deepseek-r1' | 'gpt-4o';       // 用户偏好的AI模型
+  
+  // 工作偏好
+  workStyle?: string[];                            // Work style preferences
+  productivityPeaks?: string[];                    // Times of day when productivity peaks
+  
+  // 学习偏好
+  learningPreferences?: string[];                  // Learning style preferences
+  challengeAreas?: string[];                       // Areas where user faces challenges
+  
+  // 优先级偏好
+  priorityFocus?: {
+    efficiency: number;                            // Importance of efficiency (1-10)
+    quality: number;                               // Importance of quality (1-10)
+    creativity: number;                            // Importance of creativity (1-10)
+  };
 }
 
 /**
@@ -208,7 +224,20 @@ export const useAppStore = create<AppState>()(
         hobbies: ['Running', 'Photography', 'Cooking'],
         goals: ['Learn a new language', 'Run a marathon'],
         notes: '',
-        userContextHistory: ''
+        userContextHistory: '',
+        preferredModel: 'gpt-4o',
+        // 工作偏好
+        workStyle: [],
+        productivityPeaks: [],
+        // 学习偏好
+        learningPreferences: [],
+        challengeAreas: [],
+        // 优先级偏好
+        priorityFocus: {
+          efficiency: 5,
+          quality: 5,
+          creativity: 5
+        }
       },
       tasks: [],
       goals: [],

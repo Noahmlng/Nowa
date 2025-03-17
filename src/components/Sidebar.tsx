@@ -346,7 +346,15 @@ export default function Sidebar() {
       
       {/* Footer with settings button */}
       <div className="py-3 px-3 border-t border-gray-200">
-        <button className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
+        <button 
+          className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors"
+          onClick={() => {
+            console.log('Settings button clicked');
+            setIsProfileModalOpen(true);
+          }}
+          aria-label="打开设置"
+          title="打开设置"
+        >
           <Settings size={18} className="text-gray-500" />
           <span className="text-sm">Settings</span>
         </button>

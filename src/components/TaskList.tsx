@@ -73,6 +73,13 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const filteredTasks = tasks.filter(task => {
     if (filter === 'today') {
+      // 添加调试日志
+      if (task.dueDate) {
+        const parsedDate = parseISO(task.dueDate);
+        const isCurrentDay = isToday(parsedDate);
+        console.log(`任务: ${task.title}, 日期: ${task.dueDate}, 是否今天: ${isCurrentDay}`);
+      }
+      
       // Only show tasks with a due date of today
       return task.dueDate && isToday(parseISO(task.dueDate));
     } else if (filter === 'completed') {
@@ -273,20 +280,26 @@ export default function TaskList({ filter }: TaskListProps) {
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
       // 创建基础任务对象
-      const newTask = {
+      const newTask: any = {
         title: newTaskTitle,
         description: '',
-        status: 'pending',
-        priority: 'medium',
+        status: 'pending' as const,
+        priority: 'medium' as const,
         important: false,
         taskListId: 'inbox',
       };
       
       // 基于当前视图设置正确属性
       if (filter === 'today') {
-        // My Day 视图需要设置今日日期
-        const today = new Date().toISOString().split('T')[0];
-        newTask.dueDate = today;
+        // My Day 视图需要设置今日日期 - 使用本地时区
+        const today = new Date();
+        const localDate = today.getFullYear() + '-' + 
+                         String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                         String(today.getDate()).padStart(2, '0');
+        
+        console.log('设置My Day任务日期为本地时区今天:', localDate);
+        
+        newTask.dueDate = localDate;
         newTask.taskListId = 'today';
       } else if (filter === 'important') {
         // Important 视图需要设置 important 为 true
