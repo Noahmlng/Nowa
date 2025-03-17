@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Target, Zap, Flag, Edit2, Wand2 } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckCircle, X, Trash2, Star, Sun, ClipboardList, ArrowDown, Flag, Edit2, Target, Zap } from 'lucide-react';
 import TaskDetail from './TaskDetail';
 import TaskSuggestions from './TaskSuggestions';
 import { useAppStore } from '@/store/store';
@@ -73,6 +73,13 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const filteredTasks = tasks.filter(task => {
     if (filter === 'today') {
+      // 添加调试日志
+      if (task.dueDate) {
+        const parsedDate = parseISO(task.dueDate);
+        const isCurrentDay = isToday(parsedDate);
+        console.log(`任务: ${task.title}, 日期: ${task.dueDate}, 是否今天: ${isCurrentDay}`);
+      }
+      
       // Only show tasks with a due date of today
       return task.dueDate && isToday(parseISO(task.dueDate));
     } else if (filter === 'completed') {
@@ -272,62 +279,38 @@ export default function TaskList({ filter }: TaskListProps) {
    */
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
-      // Create the new task with default values
-      const newTask: Omit<Task, 'id'> = {
+      // 创建基础任务对象
+      const newTask: any = {
         title: newTaskTitle,
+        description: '',
         status: 'pending' as const,
         priority: 'medium' as const,
         important: false,
         taskListId: 'inbox',
       };
       
-      // Set appropriate attributes based on the current filter
+      // 基于当前视图设置正确属性
       if (filter === 'today') {
-        // For My Day view, set due date to today
-        const today = new Date().toISOString().split('T')[0];
-        newTask.dueDate = today;
+        // My Day 视图需要设置今日日期 - 使用本地时区
+        const today = new Date();
+        const localDate = today.getFullYear() + '-' + 
+                         String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                         String(today.getDate()).padStart(2, '0');
+        
+        console.log('设置My Day任务日期为本地时区今天:', localDate);
+        
+        newTask.dueDate = localDate;
         newTask.taskListId = 'today';
       } else if (filter === 'important') {
-        // For Important view, set important to true
+        // Important 视图需要设置 important 为 true
         newTask.important = true;
       } else if (filter !== 'all' && filter !== 'completed') {
-        // For custom lists, set the taskListId to the current filter
+        // 自定义列表使用 filter 作为 listId
         newTask.taskListId = filter;
       }
       
-      // Add the task
-      const newTaskId = addTask(newTask);
-      
-      // Add to user context history
-      if (typeof addToUserContextHistory === 'function') {
-        const contextUpdate = `[New Task] Created task "${newTask.title}"`;
-        addToUserContextHistory(contextUpdate);
-      }
-      
-      // Clear the input field
+      addTask(newTask);
       setNewTaskTitle('');
-    }
-  };
-
-  /**
-   * Add a task to My Day
-   */
-  const handleAddToMyDay = (taskId: string) => {
-    // Find the task
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    
-    // Set the task's due date to today and update the taskListId
-    const today = new Date().toISOString().split('T')[0];
-    updateTask(taskId, { 
-      taskListId: 'today',
-      dueDate: today
-    });
-    
-    // Add to user context history
-    if (typeof addToUserContextHistory === 'function') {
-      const contextUpdate = `[Task Update] Added task "${task.title}" to My Day`;
-      addToUserContextHistory(contextUpdate);
     }
   };
 
@@ -460,6 +443,18 @@ export default function TaskList({ filter }: TaskListProps) {
     }
   };
 
+  /**
+   * Add a task to My Day
+   */
+  const handleAddToMyDay = (taskId: string) => {
+    // Set the task's due date to today and update the taskListId
+    const today = new Date().toISOString().split('T')[0];
+    updateTask(taskId, { 
+      taskListId: 'today',
+      dueDate: today
+    });
+  };
+
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       {/* Task input */}
@@ -476,6 +471,8 @@ export default function TaskList({ filter }: TaskListProps) {
           <button
             className="bg-blue-500 text-white px-3 py-2 rounded-r-md hover:bg-blue-600 transition-colors h-10 flex items-center justify-center"
             onClick={handleAddTask}
+            aria-label="Add task"
+            title="Add task"
           >
             <Plus size={20} />
           </button>
@@ -511,6 +508,8 @@ export default function TaskList({ filter }: TaskListProps) {
                       <button
                         className="flex-shrink-0 mt-0.5"
                         onClick={() => toggleTaskComplete(task.id)}
+                        aria-label={task.status === 'completed' ? "Mark as incomplete" : "Mark as complete"}
+                        title={task.status === 'completed' ? "Mark as incomplete" : "Mark as complete"}
                       >
                         {task.status === 'completed' ? (
                           <CheckCircle className="h-5 w-5 text-blue-500" />
@@ -538,6 +537,8 @@ export default function TaskList({ filter }: TaskListProps) {
                                       handleSaveTaskTitle();
                                     }
                                   }}
+                                  aria-label="Edit task title"
+                                  placeholder="Task title"
                                 />
                               </div>
                             ) : (
@@ -612,6 +613,8 @@ export default function TaskList({ filter }: TaskListProps) {
                                 e.stopPropagation();
                                 deleteTask(task.id);
                               }}
+                              aria-label="Delete task"
+                              title="Delete task"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>

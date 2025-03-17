@@ -421,22 +421,15 @@ export default function Sidebar() {
       
       {/* Footer with settings button */}
       <div className="py-3 px-3 border-t border-gray-200">
-        {/* Replace the icon buttons with text buttons in the same row */}
-        <div className="flex justify-between mb-3 text-xs">
-          <button 
-            onClick={handleSaveToServer}
-            className="text-gray-500 hover:text-gray-700 transition-colors" 
-          >
-            备份数据
-          </button>
-          <button 
-            onClick={handleSaveToFile}
-            className="text-gray-500 hover:text-gray-700 transition-colors" 
-          >
-            下载数据
-          </button>
-        </div>
-        <button className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
+        <button 
+          className="w-full flex items-center space-x-3 text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors"
+          onClick={() => {
+            console.log('Settings button clicked');
+            setIsProfileModalOpen(true);
+          }}
+          aria-label="打开设置"
+          title="打开设置"
+        >
           <Settings size={18} className="text-gray-500" />
           <span className="text-sm">Settings</span>
         </button>

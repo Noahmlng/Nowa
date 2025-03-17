@@ -49,6 +49,11 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
     creativity: userProfile.priorityFocus?.creativity || 5
   });
   
+  // 模型选择
+  const [preferredModel, setPreferredModel] = useState<'deepseek-r1' | 'gpt-4o'>(
+    userProfile.preferredModel || 'gpt-4o'
+  );
+  
   // New item inputs
   const [newPersonality, setNewPersonality] = useState('');
   const [newInterest, setNewInterest] = useState('');
@@ -66,6 +71,7 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
       setHobbies(userProfile.hobbies || []);
       setPersonalGoals(userProfile.goals || []);
       setNotes(userProfile.notes || '');
+      setPreferredModel(userProfile.preferredModel || 'gpt-4o');
       
       // 工作偏好
       setWorkStyle(userProfile.workStyle || []);
@@ -97,6 +103,7 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
       hobbies,
       goals: personalGoals,
       notes,
+      preferredModel,
       
       // 工作偏好
       workStyle,
@@ -510,6 +517,48 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
                   <span>低优先级</span>
                   <span>高优先级</span>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">AI 模型设置</h3>
+                
+                <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">AI 模型选择</h4>
+                      <p className="text-sm text-gray-500">选择用于生成任务建议和计划的 AI 模型</p>
+                    </div>
+                    
+                    <div className="relative inline-block w-16 align-middle select-none">
+                      <input 
+                        type="checkbox" 
+                        id="modelToggle" 
+                        checked={preferredModel === 'gpt-4o'} 
+                        onChange={() => setPreferredModel(preferredModel === 'gpt-4o' ? 'deepseek-r1' : 'gpt-4o')}
+                        className="hidden" 
+                        aria-label="切换 AI 模型"
+                        aria-checked={preferredModel === 'gpt-4o' ? 'true' : 'false'}
+                      />
+                      <label 
+                        htmlFor="modelToggle"
+                        className={`block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer ${
+                          preferredModel === 'gpt-4o' ? 'bg-blue-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span 
+                          className={`block h-6 w-6 rounded-full bg-white transform transition-transform ${
+                            preferredModel === 'gpt-4o' ? 'translate-x-10' : 'translate-x-0'
+                          }`} 
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2 text-sm">
+                    <span className="font-medium">当前选择：</span> 
+                    {preferredModel === 'gpt-4o' ? 'GPT-4o (OpenAI)' : 'DeepSeek R1'}
+                  </div>
                 </div>
               </div>
             </div>

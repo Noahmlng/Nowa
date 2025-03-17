@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Check, ChevronRight, Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Check, ChevronRight } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 
 interface TaskSuggestionsProps {
@@ -30,7 +30,7 @@ interface TimelinePhase {
  * Allows users to select a suggestion and see a detailed plan.
  */
 export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProps) {
-  const { tasks, userProfile, updateTask, addTaskFeedback, addToUserContextHistory } = useAppStore();
+  const { tasks, userProfile, goals, updateTask, addTaskFeedback } = useAppStore();
   
   // Find the target task
   const task = tasks.find(t => t.id === taskId);
@@ -46,6 +46,17 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
     timeline?: TimelinePhase[];
   } | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [isRequestingPlan, setIsRequestingPlan] = useState(false);
+  
+  // 获取活跃的目标列表
+  const activeGoals = useMemo(() => {
+    return goals.filter(goal => goal.status === 'active');
+  }, [goals]);
+  
+  // 从活跃目标中提取标题作为隐性需求
+  const implicitNeeds = useMemo(() => {
+    return activeGoals.map(goal => goal.title);
+  }, [activeGoals]);
   
   // Load suggestions when component mounts
   useEffect(() => {
@@ -62,55 +73,131 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
         task.title.toLowerCase().includes('run') || 
         task.title.toLowerCase().includes('training')) {
       recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
+      console.log('[TaskSuggestions] 使用模拟反馈:', recentFeedback);
+    } else if (task.feedback && task.feedback.length > 0) {
+      // 使用任务的实际反馈（如果有）
+      const latestFeedback = task.feedback[task.feedback.length - 1];
+      recentFeedback = latestFeedback.text;
+      console.log('[TaskSuggestions] 使用实际任务反馈:', recentFeedback);
+    } else {
+      console.log('[TaskSuggestions] 任务没有反馈数据');
     }
     
+    // 标记组件是否已卸载，防止在组件卸载后设置状态
+    let isMounted = true;
+    
+    // 添加一个加载标志，防止重复请求
+    let isLoading = false;
+    
     const loadSuggestions = async () => {
+      // 如果已经在加载中或组件已卸载，直接返回
+      if (isLoading || !isMounted) {
+        return;
+      }
+      
+      // 设置加载标志
+      isLoading = true;
+      
       try {
-        // Call the API route
+        // 获取用户上下文历史
+        const relevantContext = userProfile.userContextHistory || '';
+        
+        console.log('开始加载任务建议: ', {
+          taskTitle: task.title,
+          userProfile: userProfile,
+          implicitNeeds: implicitNeeds,
+          recentFeedback,
+          contextHistoryLength: relevantContext.length
+        });
+        
+        // 提取用户所有的活跃目标作为隐性需求
+        const activeGoals = goals
+          .filter(g => g.status === 'active')
+          .map(g => g.title);
+        
+        // 记录将要发送到API的所有参数
+        console.log('[TaskSuggestions] 发送到API的参数:', {
+          taskTitle: task.title,
+          userProfile,
+          implicitNeeds: activeGoals,
+          recentFeedback,
+          hasUserContextHistory: !!relevantContext,
+          userContextHistoryLength: relevantContext.length
+        });
+        
+        // 调用建议API
         const response = await fetch('/api/suggestions', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             taskTitle: task.title,
             userProfile,
-            implicitNeeds: userProfile.goals,
-            recentFeedback: task.feedback && task.feedback.length > 0 
-              ? task.feedback.map(f => f.text).join('\n') 
-              : undefined,
-            userContextHistory: userProfile.userContextHistory
-          })
+            implicitNeeds: activeGoals,
+            recentFeedback,
+            userContextHistory: relevantContext
+          }),
         });
         
+        console.log('API响应状态: ', response.status, response.statusText);
+        
         if (!response.ok) {
-          throw new Error('Failed to load suggestions');
+          const errorText = await response.text();
+          console.error('API响应错误详情: ', errorText);
+          throw new Error(`加载建议失败: ${response.status} ${response.statusText} - ${errorText}`);
         }
         
         const data = await response.json();
-        setSuggestions(data.suggestions);
+        console.log('获取到的建议: ', data);
+        
+        // 只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setSuggestions(data.suggestions);
+        }
       } catch (error) {
-        console.error('Error loading suggestions:', error);
-        setSuggestions([
-          'Recovery-focused training to address your hip discomfort',
-          'Combined cardio and strength workout targeting core muscles',
-          'Gradual endurance building with low-impact exercises'
-        ]);
+        console.error('加载建议时出错:', error);
+        // 使用回退建议，同样只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setSuggestions([
+            'Recovery-focused training to address your hip discomfort',
+            'Combined cardio and strength workout targeting core muscles',
+            'Gradual endurance building with low-impact exercises'
+          ]);
+        }
       } finally {
-        setLoading(false);
+        // 只在组件仍然挂载时设置状态
+        if (isMounted) {
+          setLoading(false);
+        }
+        // 重置加载标志
+        isLoading = false;
       }
     };
     
     loadSuggestions();
-  }, [task, userProfile]);
+    
+    // 清理函数，在组件卸载时执行
+    return () => {
+      isMounted = false;
+    };
+  }, [task, userProfile, implicitNeeds]); // 添加implicitNeeds作为依赖项
   
   // Handle selecting a suggestion
   const handleSelectSuggestion = async (suggestion: string) => {
+    // 如果已经在请求计划，则忽略后续点击
+    if (isRequestingPlan) return;
+    
     setSelectedSuggestion(suggestion);
     setLoadingPlan(true);
+    setIsRequestingPlan(true);
     
     try {
-      if (!task) return;
+      if (!task) {
+        setLoadingPlan(false);
+        setIsRequestingPlan(false);
+        return;
+      }
       
       // Find the most recent feedback if available (same as above)
       let recentFeedback: string | undefined;
@@ -120,6 +207,16 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           task.title.toLowerCase().includes('training')) {
         recentFeedback = "In the last workout, there was right leg hip joint pain and tight right thigh muscles.";
       }
+      
+      // 获取用户上下文历史
+      const relevantContext = userProfile.userContextHistory || '';
+      
+      console.log('开始加载详细计划: ', {
+        taskTitle: task.title,
+        selectedSuggestion: suggestion,
+        implicitNeeds: implicitNeeds, // 同样传递活跃目标作为隐性需求
+        contextHistoryLength: relevantContext.length // 记录上下文长度但不打印全部内容
+      });
       
       // Call the API route
       const response = await fetch('/api/plan', {
@@ -132,27 +229,25 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
           taskTitle: task.title,
           selectedSuggestion: suggestion,
           userProfile,
-          userContextHistory: userProfile.userContextHistory
+          implicitNeeds, // 添加从活跃目标获取的隐性需求
+          recentFeedback,
+          userContextHistory: relevantContext // 传递用户上下文历史
         })
       });
       
+      console.log('计划API响应状态: ', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to load detailed plan');
+        const errorText = await response.text();
+        console.error('计划API响应错误详情: ', errorText);
+        throw new Error(`加载详细计划失败: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
-      console.log('Received plan data:', data); // 添加日志以便调试
-      
-      // 确保 plan 对象有正确的结构
-      if (data && data.plan) {
-        // 从 Markdown 内容创建结构化的计划
-        const parsedPlan = parseMarkdownPlan(data.plan, task.title, suggestion);
-        setDetailedPlan(parsedPlan);
-      } else {
-        throw new Error('Invalid plan data received');
-      }
+      const plan = await response.json();
+      console.log('获取到的计划: ', plan);
+      setDetailedPlan(plan);
     } catch (error) {
-      console.error('Error loading detailed plan:', error);
+      console.error('加载详细计划时出错:', error);
       
       // Create fallback subtasks with proper IDs
       const fallbackSubtasks: Subtask[] = [
@@ -180,6 +275,7 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
       });
     } finally {
       setLoadingPlan(false);
+      setIsRequestingPlan(false);
     }
   };
   
@@ -361,6 +457,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
             <button 
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
+              title="关闭"
+              aria-label="关闭"
             >
               <X size={16} />
             </button>
@@ -404,6 +502,8 @@ export default function TaskSuggestions({ taskId, onClose }: TaskSuggestionsProp
                   <button 
                     onClick={handleDecline}
                     className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                    title="关闭"
+                    aria-label="关闭"
                   >
                     <X size={18} />
                   </button>

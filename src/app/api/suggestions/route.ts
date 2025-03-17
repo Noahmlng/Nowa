@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 }
 
 /**
- * Generate task suggestions using DeepSeek API
+ * Generate task suggestions using the selected AI model
  */
 async function generateSuggestions(
   taskTitle: string,
@@ -39,93 +39,184 @@ async function generateSuggestions(
   userContextHistory?: string
 ): Promise<string[]> {
   try {
+    // 添加日志显示接收到的反馈
+    console.log('[API-Suggestions] 收到的反馈参数:', {
+      taskTitle,
+      recentFeedback: recentFeedback ? `${recentFeedback.substring(0, 100)}${recentFeedback.length > 100 ? '...' : ''}` : '无反馈',
+      hasUserContextHistory: !!userContextHistory,
+      userContextHistoryLength: userContextHistory?.length || 0
+    });
+
     // Construct the prompt
     const prompt = constructSuggestionPrompt(taskTitle, userProfile, implicitNeeds, recentFeedback, userContextHistory);
-    console.log('[API-Suggestions] Constructed prompt:', prompt.substring(0, 200) + '...');
+    console.log('[API-Suggestions] 构建的提示词:', prompt.substring(0, 200) + '...');
     
-    // Request configuration
-    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-
-    console.log('[API-Suggestions] Request configuration:', { 
-      apiUrl, 
-      model, 
-      apiKeyProvided: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0
-    });
+    // 确定使用哪个模型
+    const preferredModel = userProfile.preferredModel || 'gpt-4o';
+    console.log('[API-Suggestions] 使用模型:', preferredModel);
     
-    // Call DeepSeek API
-    const requestBody = {
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a comprehensive task management expert with the following capabilities:\n\n【Core Roles】  \n1. **Domain Identifier**: Automatically determine task type (health/learning/career etc.)  \n2. **Risk Auditor**: Detect potential contradictions/danger signals in user input  \n3. **Solution Architect**: Generate structured proposals  \n\n【Cross-domain Knowledge Base】  \n- Health Management: Sports Medicine/Nutrition/Rehabilitation Principles  \n- Learning Planning: Cognitive Science/Time Management/Knowledge System Construction  \n- Career Development: OKR Formulation/Skill Transfer Strategy/Industry Trend Analysis  \n\n【Interaction Protocol】  \n1. Proposals must include:  \n   - Risk assessment (marked with ❗️ grading)  \n   - Cross-domain suggestions (such as "Learning plan and biological clock compatibility")  \n   - 3 optional paths (conservative/balanced/aggressive strategies)  \n2. Use analogies to explain professional concepts (such as "This learning plan is like a pyramid, the foundation layer is...")'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      top_p: 0.7,
-      max_tokens: 800,
-      presence_penalty: 0.2
-    };
-    
-    console.log('[API-Suggestions] Sending request...');
-    const startTime = Date.now();
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const responseTime = Date.now() - startTime;
-    console.log(`[API-Suggestions] Received response: status=${response.status}, time=${responseTime}ms`);
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('[API-Suggestions] DeepSeek API error:', data);
-      throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+    // 根据用户偏好选择不同的API配置
+    let apiResponse;
+    if (preferredModel === 'deepseek-r1') {
+      apiResponse = await callDeepseekAPI(prompt);
+    } else {
+      apiResponse = await callOpenAIAPI(prompt);
     }
-
-    console.log('[API-Suggestions] Parsing response data...');
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('[API-Suggestions] Invalid response format:', data);
-      throw new Error('Invalid response format from DeepSeek API');
-    }
-
+    
     // Parse the response to extract suggestions
-    const suggestions = parseSuggestions(data.choices[0].message.content, taskTitle);
-    console.log('[API-Suggestions] Parsed suggestions:', suggestions);
+    const suggestions = parseSuggestions(apiResponse, taskTitle);
+    console.log('[API-Suggestions] 解析后的建议:', suggestions);
     
     return suggestions;
   } catch (error) {
-    console.error('[API-Suggestions] Error generating suggestions:', error);
+    console.error('[API-Suggestions] 生成建议时出错:', error);
     // Fallback suggestions
     return getDefaultSuggestions(taskTitle);
   }
 }
 
 /**
- * Get default suggestions
+ * 调用 DeepSeek API
+ */
+async function callDeepseekAPI(prompt: string): Promise<string> {
+  // 请求配置
+  const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+  console.log('[API-Suggestions] DeepSeek 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey,
+    apiKeyLength: apiKey ? apiKey.length : 0
+  });
+  
+  // Call DeepSeek API
+  const requestBody = {
+    model: model,
+    messages: [
+      {
+        role: 'system',
+        content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的任务提案将采用：**任务名称（括号里简要说明核心原因/策略）**\n- 任务名称要简明扼要\n- 括号内需提供任务的关键背景，说明为什么要做这个任务\n- 不同任务的提案需要有差异化侧重点'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.7,
+    top_p: 0.7,
+    max_tokens: 800,
+    presence_penalty: 0.2
+  };
+  
+  console.log('[API-Suggestions] 发送 DeepSeek 请求...');
+  const startTime = Date.now();
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseTime = Date.now() - startTime;
+  console.log(`[API-Suggestions] 收到 DeepSeek 响应: 状态=${response.status}, 耗时=${responseTime}ms`);
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('[API-Suggestions] DeepSeek API 错误:', data);
+    throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('[API-Suggestions] DeepSeek 返回的数据格式不正确:', data);
+    throw new Error('Invalid response format from DeepSeek API');
+  }
+
+  return data.choices[0].message.content;
+}
+
+/**
+ * 调用 OpenAI API
+ */
+async function callOpenAIAPI(prompt: string): Promise<string> {
+  // 请求配置
+  const apiUrl = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = 'gpt-4o';
+
+  console.log('[API-Suggestions] OpenAI 请求配置:', { 
+    apiUrl, 
+    model, 
+    apiKeyProvided: !!apiKey,
+    apiKeyLength: apiKey ? apiKey.length : 0
+  });
+  
+  // Call OpenAI API
+  const requestBody = {
+    model: model,
+    messages: [
+      {
+        role: 'system',
+        content: '你是一个全能型任务管理专家，具备以下能力架构：\n\n【核心角色】  \n1. **领域识别者**：自动判断任务类型（健康/学习/职业等）  \n2. **风险审计员**：检测用户输入中的潜在矛盾/危险信号  \n3. **方案架构师**：生成结构化提案  \n\n【跨领域知识库】  \n- 健康管理：运动医学/营养学/康复原理  \n- 学习规划：认知科学/时间管理/知识体系构建  \n- 职业发展：OKR制定/技能迁移策略/行业趋势分析  \n\n【输出格式】\n你提供的任务提案将采用：**任务名称（括号里简要说明核心原因/策略）**\n- 任务名称要简明扼要\n- 括号内需提供任务的关键背景，说明为什么要做这个任务\n- 不同任务的提案需要有差异化侧重点'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.7,
+    top_p: 0.7,
+    max_tokens: 800,
+    presence_penalty: 0.2
+  };
+  
+  console.log('[API-Suggestions] 发送 OpenAI 请求...');
+  const startTime = Date.now();
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseTime = Date.now() - startTime;
+  console.log(`[API-Suggestions] 收到 OpenAI 响应: 状态=${response.status}, 耗时=${responseTime}ms`);
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    console.error('[API-Suggestions] OpenAI API 错误:', data);
+    throw new Error(`Failed to generate task suggestions: ${response.status} ${response.statusText}`);
+  }
+
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    console.error('[API-Suggestions] OpenAI 返回的数据格式不正确:', data);
+    throw new Error('Invalid response format from OpenAI API');
+  }
+
+  return data.choices[0].message.content;
+}
+
+/**
+ * 获取默认建议选项
  */
 function getDefaultSuggestions(taskTitle: string): string[] {
-  if (/exercise|workout|run|training/i.test(taskTitle)) {
-    return ['Slow jogging', 'Indoor cycling', 'Fitness routine'];
-  } else if (/diet|fasting|6pm/i.test(taskTitle)) {
-    return ['Drink water', 'Chew sugar-free gum', 'Eat vegetables'];
-  } else if (/study|read|review|write/i.test(taskTitle)) {
-    return ['Pomodoro technique', 'Flashcard review', 'Mind mapping'];
+  if (/运动|锻炼|有氧|跑步/.test(taskTitle)) {
+    return ['慢跑', '室内单车', '健身操'];
+  } else if (/饮食|禁食|6pm/.test(taskTitle)) {
+    return ['喝水', '嚼无糖口香糖', '吃蔬菜'];
+  } else if (/学习|读书|复习|写作/.test(taskTitle)) {
+    return ['番茄工作法', '闪卡复习', '思维导图'];
   } else {
-    return ['Option A', 'Option B', 'Option C'];
+    return ['方案A', '方案B', '方案C'];
   }
 }
 
@@ -179,14 +270,33 @@ function constructSuggestionPrompt(
   }
   prompt += '\n';
   
+  // Add special conditions (health, work, learning, etc.)
+  prompt += '◆ 特殊状况：';
+  if (userProfile.healthConditions && userProfile.healthConditions.length > 0) {
+    prompt += `健康：${userProfile.healthConditions.join('、')}`;
+  }
+  if (userProfile.workConditions && userProfile.workConditions.length > 0) {
+    prompt += `工作：${userProfile.workConditions.join('、')}`;
+  }
+  if (userProfile.learningConditions && userProfile.learningConditions.length > 0) {
+    prompt += `学习：${userProfile.learningConditions.join('、')}`;
+  }
+  if (!userProfile.healthConditions && !userProfile.workConditions && !userProfile.learningConditions) {
+    prompt += '无特殊状况';
+  }
+  prompt += '\n';
+  
   // Add historical trajectory
   prompt += '◆ Historical Trajectory:';
   if (userProfile.history) {
     prompt += userProfile.history;
+    console.log('[API-Suggestions] 使用用户历史作为历史轨迹:', userProfile.history.substring(0, 100) + '...');
   } else if (recentFeedback) {
     prompt += recentFeedback;
+    console.log('[API-Suggestions] 使用最近反馈作为历史轨迹:', recentFeedback.substring(0, 100) + '...');
   } else {
-    prompt += 'No history';
+    prompt += '无历史记录';
+    console.log('[API-Suggestions] 历史轨迹为空');
   }
   prompt += '\n\n';
   
@@ -194,13 +304,13 @@ function constructSuggestionPrompt(
   prompt += '【Task Context】\n';
   prompt += `★ Explicit Need: ${taskTitle}\n`;
   
-  // Add implicit needs based on active goals
-  prompt += '★ Implicit Needs:';
+  // Add implicit needs based on active goals, 使用从前端传来的implicitNeeds
+  prompt += '★ 隐性需求：';
   if (implicitNeeds && implicitNeeds.length > 0) {
-    prompt += implicitNeeds.join(', ');
+    prompt += implicitNeeds.join('、');
   } else if (userProfile.goals && userProfile.goals.length > 0) {
-    // If implicitNeeds not provided, use userProfile.goals as backup
-    prompt += userProfile.goals.join(', ');
+    // 如果没有传入implicitNeeds，则使用userProfile.goals作为后备
+    prompt += userProfile.goals.join('、');
   } else {
     prompt += 'Not specified';
   }
@@ -217,90 +327,51 @@ function constructSuggestionPrompt(
   prompt += constraints.length > 0 ? constraints.join(', ') : 'No explicit constraints';
   prompt += '\n\n';
   
-  // Add notes about the relationship between current task and implicit needs
+  // 添加注意事项，关注当前任务和隐性需求的关系
   if (implicitNeeds && implicitNeeds.length > 0) {
-    prompt += '【Notes】\n';
-    prompt += `★ Relationship between current task and user's long-term goals: Please consider how the current task "${taskTitle}" relates to the user's implicit needs (${implicitNeeds.join(', ')}).\n`;
-    prompt += '★ Prioritize the most relevant goals: When generating suggestions, prioritize the goals most relevant to the current task, rather than considering all goals.\n\n';
+    prompt += '【注意事项】\n';
+    prompt += `★ 当前任务与用户长期目标的关系：请考虑当前任务"${taskTitle}"如何与用户的隐性需求(${implicitNeeds.join('、')})建立关联。\n`;
+    prompt += '★ 优先考虑最相关的目标：在生成建议时，请优先考虑与当前任务最相关的目标，而不是考虑所有目标。\n\n';
   }
   
-  // Add relevant user context history (if available)
+  // 添加相关的用户上下文历史（如果有）
   if (userContextHistory && userContextHistory.length > 0) {
-    // Extract relevant context using the same method as in plan API
+    // 使用与plan API相同的方法提取相关上下文
     const relevantContext = extractRelevantContext(userContextHistory, taskTitle, '');
     if (relevantContext.length > 0) {
-      prompt += '【User Context History】\n';
+      prompt += '【用户历史上下文】\n';
       prompt += relevantContext + '\n\n';
     }
   }
   
-  // Output requirements
-  prompt += '【Output Requirements】\n';
-  prompt += '1. Analyze the task and determine the most important core dimension for this task\n';
-  prompt += '2. Provide three different specific options within that dimension\n';
-  prompt += '3. Each option must:\n';
-  prompt += `   - Be directly related to the task "${taskTitle}"\n`;
-  prompt += '   - Be kept within 10 characters\n';
-  prompt += '   - Be concise and clear like app options\n';
-  prompt += '   - Avoid verbose explanations and modifiers\n';
-  prompt += '4. The three options should:\n';
-  prompt += '   - Belong to the same dimension (e.g., all exercise types, all execution methods, etc.)\n';
-  prompt += '   - Be mutually exclusive (user can only choose one)\n';
-  prompt += '   - Consider user circumstances and preferences\n';
-  prompt += '   - Possibly align with user\'s implicit needs/long-term goals\n';
+  // 修改输出要求为新格式
+  prompt += '【输出要求】\n';
+  prompt += '1. 分析任务，确定对这个任务最重要的一个核心维度\n';
+  prompt += '2. 在该维度下，提供三个不同的具体选项\n';
+  prompt += '3. 每个选项必须：\n';
+  prompt += `   - 都与当天任务"${taskTitle}"直接相关\n`;
+  prompt += '   - 长度控制在10字以内\n';
+  prompt += '   - 像app选项一样简洁明了\n';
+  prompt += '   - 避免啰嗦的解释和修饰词\n';
+  prompt += '4. 三个选项应该：\n';
+  prompt += '   - 属于同一维度（如都是运动类型、都是执行方式等）\n';
+  prompt += '   - 互相排他（用户只能选择其中一个）\n';
+  prompt += '   - 考虑用户情况和偏好\n';
+  prompt += '   - 可能与用户的隐性需求/长期目标保持一致\n';
+  prompt += '请按照以下格式提供三个不同的任务提案：\n';
+  prompt += '1. **任务名称（括号里简要说明核心原因/策略）**\n';
+  prompt += '2. **任务名称（括号里简要说明核心原因/策略）**\n';
+  prompt += '3. **任务名称（括号里简要说明核心原因/策略）**\n\n';
+  prompt += `每个提案必须：\n`;
+  prompt += `- 与当前任务「${taskTitle}」直接相关\n`;
+  prompt += '- 任务名称简明扼要，不超过8个字\n';
+  prompt += '- 括号内提供关键背景或策略，不超过15个字\n';
+  prompt += '- 有明确的差异化侧重点\n';
+  prompt += '- 考虑用户情况和偏好\n';
+  prompt += '- 与用户的隐性需求/长期目标保持一致\n';
+  prompt += '直接输出三行提案，每行一个，无需额外解释\n';
   
   return prompt;
-}
-
-/**
- * Parse suggestions from DeepSeek API response
- */
-function parseSuggestions(content: string, taskTitle: string): string[] {
-  try {
-    console.log('[API-Suggestions] Original content:', content);
-    
-    // Simplified parsing, only extract short options
-    const lines = content.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && line.length <= 20) // Control length more strictly
-      // Remove any line markers, numbers, etc.
-      .map(line => line.replace(/^([0-9]+\.|\*|\-|>|#|【|】)\s*/, ''))
-      .map(line => line.replace(/^\*\*|\*\*$/g, ''))
-      // Filter out empty lines, too short lines, lines with punctuation
-      .filter(line => line.length >= 2 && 
-                      !line.includes(':') && 
-                      !line.includes('：') &&
-                      !line.includes('dimension') &&
-                      !line.includes('options') &&
-                      !line.includes('Option'));
-    
-    // Get the most likely suggestions
-    let suggestions = lines.slice(0, 5);
-    
-    // If we have more than 3 suggestions, try to find the most relevant ones
-    if (suggestions.length > 3) {
-      // Sort by relevance to task title (simple word matching)
-      const taskWords = taskTitle.toLowerCase().split(/\s+/);
-      suggestions = suggestions.sort((a, b) => {
-        const aScore = taskWords.filter(word => a.toLowerCase().includes(word)).length;
-        const bScore = taskWords.filter(word => b.toLowerCase().includes(word)).length;
-        return bScore - aScore;
-      });
-    }
-    
-    // Take the top 3 suggestions or pad with defaults if needed
-    suggestions = suggestions.slice(0, 3);
-    
-    // If we don't have enough suggestions, add defaults
-    while (suggestions.length < 3) {
-      suggestions.push(`Option ${suggestions.length + 1}`);
-    }
-    
-    return suggestions;
-  } catch (error) {
-    console.error('[API-Suggestions] Error parsing suggestions:', error);
-    return ['Option 1', 'Option 2', 'Option 3'];
-  }
 }
 
 /**
@@ -322,17 +393,17 @@ function extractRelevantContext(
     return '';
   }
   
-  // Simple implementation: select entries containing keywords
+  // 简单实现：选择含有关键词的条目
   const keywordsSet = new Set<string>([
     ...taskTitle.toLowerCase().split(/\s+/),
     ...(selectedSuggestion ? selectedSuggestion.toLowerCase().split(/\s+/) : [])
   ]);
-  const keywords = Array.from(keywordsSet).filter(word => word.length > 3); // Only use longer words as keywords
+  const keywords = Array.from(keywordsSet).filter(word => word.length > 3); // 只使用较长的单词作为关键词
   
-  // Score each entry based on the number of keywords it contains
+  // 给每个条目评分，根据它包含的关键词数量
   const scoredEntries = entries.map(entry => {
     const lowerEntry = entry.toLowerCase();
-    // Calculate score: number of keywords found + newer entries score higher
+    // 计算分数：找到的关键词数量 + 越新的条目分数越高
     let score = 0;
     keywords.forEach(word => {
       if (lowerEntry.includes(word)) {
@@ -340,18 +411,18 @@ function extractRelevantContext(
       }
     });
     
-    // Specific types of entries get bonus points
-    if (entry.includes('[Task Feedback]')) score += 2;
-    if (entry.includes('[Task Update]')) score += 1;
-    if (entry.includes('[New Task]')) score += 1;
+    // 特定类型的条目加分
+    if (entry.includes('[任务反馈]')) score += 2;
+    if (entry.includes('[任务更新]')) score += 1;
+    if (entry.includes('[新任务]')) score += 1;
     
     return { entry, score };
   });
   
-  // Sort by score and keep the most relevant entries
+  // 根据分数排序，并保留最相关的条目
   scoredEntries.sort((a, b) => b.score - a.score);
   
-  // Combine the most relevant entries until reaching the maximum character count
+  // 合并最相关的条目，直到达到最大字符数
   let relevantContext = '';
   for (const { entry } of scoredEntries) {
     if (relevantContext.length + entry.length + 1 > maxChars) {
@@ -361,4 +432,55 @@ function extractRelevantContext(
   }
   
   return relevantContext;
+}
+
+/**
+ * Parse suggestions from DeepSeek API response
+ */
+function parseSuggestions(content: string, taskTitle: string): string[] {
+  try {
+    console.log('[API-Suggestions] 原始内容:', content);
+    
+    // 解析新格式的任务提案
+    const lines = content.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0) 
+      .filter(line => line.includes('**') && (line.includes('（') || line.includes('(')));
+    
+    console.log('[API-Suggestions] 提取的提案行:', lines);
+    
+    // 处理匹配的行
+    const suggestions: string[] = [];
+    for (let i = 0; i < Math.min(3, lines.length); i++) {
+      // 尝试提取格式化的内容
+      const match = lines[i].match(/\*\*([^（\(]*)[（\(](.*?)[）\)]/) || lines[i].match(/([^（\(]*)[（\(](.*?)[）\)]/);
+      if (match && match.length >= 3) {
+        suggestions.push(`${match[1].trim()}（${match[2].trim()}）`);
+      } else {
+        // 如果格式不匹配，使用整行
+        suggestions.push(lines[i].replace(/\*\*/g, '').trim());
+      }
+    }
+    
+    // 补充不足的选项
+    const defaultSuggestions = getDefaultSuggestions(taskTitle);
+    while (suggestions.length < 3) {
+      suggestions.push(defaultSuggestions[suggestions.length % defaultSuggestions.length]);
+    }
+    
+    console.log('[API-Suggestions] 最终选项:', suggestions);
+    return suggestions;
+  } catch (error) {
+    console.error('[API-Suggestions] 解析建议时出错:', error);
+    return getDefaultSuggestions(taskTitle);
+  }
+}
+
+/**
+ * Evaluate the relevance of a suggestion to a task
+ */
+function evaluateRelevance(suggestion: string, taskTitle: string): number {
+  // Implementation of relevance evaluation logic
+  // This is a placeholder and should be replaced with actual implementation
+  return 0.8; // Placeholder return, actual implementation needed
 } 
