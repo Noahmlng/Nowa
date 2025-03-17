@@ -46,27 +46,33 @@ While 89% of productivity tools focus on completion rates, Nowa measures what ma
 
 ---
 
-## Technical Implementation | 技术实现
+## 技术实现
 
-### Core Architecture
-```text
+### 项目结构
+```
 nowa/
 ├── src/
-│   ├── app/            # 应用路由与核心布局
-│   ├── components/     # 交互组件库
-│   │   ├── GoalEngine/ # 目标解析引擎
-│   │   └── TaskMatrix/ # 任务关系图谱
-│   └── store/
-│       └── context-aware.ts # 情境感知状态管理
+│   ├── app/            # 主应用页面和路由
+│   ├── components/     # 界面组件
+│   │   ├── EnhancedGoalList.tsx   # 目标管理
+│   │   ├── TaskList.tsx          # 任务列表
+│   │   ├── TaskDetail.tsx        # 任务详情
+│   │   ├── Sidebar.tsx           # 侧边导航
+│   │   ├── TaskSuggestions.tsx   # 任务建议
+│   │   └── DailySummary.tsx      # 日常总结
+│   ├── store/          # 状态管理
+│   ├── services/       # 服务和API
+│   ├── types/          # 类型定义
+│   └── utils/          # 工具函数
 ```
 
-### Technology Stack
-- **Next.js 14**: App Router架构实现混合渲染
-- **Zustand 4.0**: 支持上下文感知的状态管理
-- **date-fns 3.0**: 跨时区时间处理方案
-- **Tailwind 3.4**: 原子化样式系统
+### 技术栈
+- **Next.js**: React应用框架
+- **TypeScript**: 类型安全保障
+- **Zustand**: 简洁状态管理
+- **Tailwind CSS**: 高效样式系统
+- **date-fns**: 日期处理工具
 
 ---
 
-**License**: MIT  
-**Documentation**: [docs.nowa.com](https://docs.nowa.com)
+**许可证**: MIT
