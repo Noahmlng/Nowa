@@ -271,19 +271,34 @@ export default function TaskList({ filter }: TaskListProps) {
    * Creates a task with the entered title and default values
    */
   const handleAddTask = () => {
-    if (newTaskTitle.trim() === '') return;
-    
-    addTask({
-      title: newTaskTitle,
-      description: '',
-      dueDate: undefined,
-      status: 'pending',
-      priority: 'medium',
-      important: false,
-      taskListId: filter,
-    });
-    
-    setNewTaskTitle('');
+    if (newTaskTitle.trim()) {
+      // 创建基础任务对象
+      const newTask = {
+        title: newTaskTitle,
+        description: '',
+        status: 'pending',
+        priority: 'medium',
+        important: false,
+        taskListId: 'inbox',
+      };
+      
+      // 基于当前视图设置正确属性
+      if (filter === 'today') {
+        // My Day 视图需要设置今日日期
+        const today = new Date().toISOString().split('T')[0];
+        newTask.dueDate = today;
+        newTask.taskListId = 'today';
+      } else if (filter === 'important') {
+        // Important 视图需要设置 important 为 true
+        newTask.important = true;
+      } else if (filter !== 'all' && filter !== 'completed') {
+        // 自定义列表使用 filter 作为 listId
+        newTask.taskListId = filter;
+      }
+      
+      addTask(newTask);
+      setNewTaskTitle('');
+    }
   };
 
   /**
