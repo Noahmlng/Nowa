@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Plus, Edit2, Trash2, Target, X, ChevronDown, ChevronUp, Calendar, Star, Clock, CheckCircle2, Loader2, Info, Sparkles, Send, RefreshCw, Wand2, BrainCircuit, CheckCheck, MessageSquare, Circle, GripVertical } from 'lucide-react';
 import { useStore } from '@/store/store';
-import { GoalAnalysis, QuestionWithOptions, QuestionOption, TaskSuggestion } from '@/types/goal';
+import type { GoalAnalysis, QuestionWithOptions, QuestionOption, TaskSuggestion } from '@/types/goal';
 import { analyzeGoal, GoalAnalysisResult } from '@/services/ai';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 
