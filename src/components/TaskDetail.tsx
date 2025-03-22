@@ -5,7 +5,7 @@ import { format, parseISO, addDays, isToday, isTomorrow, isPast } from 'date-fns
 import { 
   X, Calendar, Flag, MessageSquare, CheckCircle, Circle, 
   Star, Sun, ChevronDown, Plus, Trash2, Mic, Send, ListChecks,
-  Clock, Check, ChevronRight, Target, Edit2
+  Clock, Check, ChevronRight, Target, Edit2, ClipboardList, CheckSquare, Square, ArrowUp, ArrowDown, Beaker, ThumbsUp
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 
@@ -21,11 +21,14 @@ interface Task {
   status: 'pending' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
   important: boolean;
+  exploratory?: boolean;
+  upvotes?: number;
   goalId?: string;
   taskListId: string;
   feedback?: {text: string; timestamp: string}[]; // Updated feedback structure with timestamps
   subtasks?: Subtask[];
   timeline?: TimelinePhase[];
+  completedAt?: string;
 }
 
 /**
@@ -38,12 +41,29 @@ interface Subtask {
 }
 
 /**
- * Timeline Phase interface for phases in a task timeline
+ * Goal interface - Represents a goal in the application
+ */
+interface Goal {
+  id: string;
+  title: string;
+  progress: number;
+  status: 'active' | 'completed' | 'cancelled';
+  startDate?: string;
+  endDate?: string;
+  tasks?: any[];
+}
+
+/**
+ * TimelinePhase interface for timeline phases in a task
  */
 interface TimelinePhase {
-  phase: string;
-  duration: string;
-  description: string;
+  id: string;
+  title: string;
+  order: number;
+  completed: boolean;
+  phase?: string;
+  duration?: string;
+  description?: string;
 }
 
 /**
@@ -82,24 +102,46 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   const { addTaskFeedback, addToUserContextHistory, goals } = useAppStore();
   const playCompletionSound = useCompletionSound();
   
-  // Local state
-  const [editedTask, setEditedTask] = useState<Task>({ ...task, subtasks: task.subtasks || [], goalId: task.goalId }); // Copy of task for editing
-  const [isEditingTitle, setIsEditingTitle] = useState(false); // Controls title editing mode
-  const [feedback, setFeedback] = useState(''); // New feedback text
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false); // Controls date picker visibility
-  const [isPriorityOpen, setIsPriorityOpen] = useState(false); // Controls priority dropdown visibility
-  const [isGoalSelectorOpen, setIsGoalSelectorOpen] = useState(false); // Controls goal selector visibility
-  const [newSubtask, setNewSubtask] = useState(''); // New subtask input
-  const [focusOnNextSubtask, setFocusOnNextSubtask] = useState(false); // Flag to focus on subtask input
-  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null); // For task completion animation
-  const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null); // For subtask completion animation
-  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null); // Track subtask being edited
-  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState(''); // Track edited subtask title
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); // Controls description expansion
-  const [descriptionLineCount, setDescriptionLineCount] = useState(0); // 跟踪描述的行数
-  const titleInputRef = useRef<HTMLTextAreaElement>(null);
+  // Helper function to get a goal by ID
+  const getGoalById = (goalId: string): Goal | null => {
+    if (!goalId) return null;
+    return goals.find(g => g.id === goalId) || null;
+  };
+  
+  // Component state
+  const [editedTask, setEditedTask] = useState<Task>({ 
+    ...task, 
+    subtasks: task.subtasks || [], 
+    goalId: task.goalId,
+    exploratory: task.exploratory || false,
+    upvotes: task.upvotes || 0
+  }); // Copy of task for editing
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(task.goalId ? getGoalById(task.goalId) : null);
+  const [newSubtaskValue, setNewSubtaskValue] = useState('');
+  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  const [feedbackValue, setFeedbackValue] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [isHidingCompleted, setIsHidingCompleted] = useState(false);
+  const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+  const [timelineType, setTimelineType] = useState<string>('');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isPriorityOpen, setIsPriorityOpen] = useState(false);
+  const [isGoalSelectorOpen, setIsGoalSelectorOpen] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [focusOnNextSubtask, setFocusOnNextSubtask] = useState(false);
+  const [descriptionLineCount, setDescriptionLineCount] = useState(0);
+  const [isExploratory, setIsExploratory] = useState(task.exploratory || false);
+  const [upvotes, setUpvotes] = useState(task.upvotes || 0);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  
+  // References
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
-  const editSubtaskInputRef = useRef<HTMLTextAreaElement>(null);
+  const editSubtaskInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
 
@@ -109,8 +151,15 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
     setEditedTask({ 
       ...task, 
       subtasks: task.subtasks || [],
-      goalId: task.goalId // 明确设置 goalId，即使它可能是 undefined
+      goalId: task.goalId, // 明确设置 goalId，即使它可能是 undefined
+      exploratory: task.exploratory || false,
+      upvotes: task.upvotes || 0
     });
+    if (task.goalId) {
+      setSelectedGoal(getGoalById(task.goalId));
+    }
+    setIsExploratory(task.exploratory || false);
+    setUpvotes(task.upvotes || 0);
   }, [task]);
 
   // 计算描述文本的行数
@@ -254,10 +303,10 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
    * Handle submitting feedback
    */
   const handleSubmitFeedback = () => {
-    if (feedback.trim()) {
+    if (feedbackValue.trim()) {
       const now = new Date().toISOString();
       const newFeedback = { 
-        text: feedback.trim(), 
+        text: feedbackValue.trim(), 
         timestamp: now 
       };
       
@@ -272,14 +321,14 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       };
       
       setEditedTask(updatedTask);
-      setFeedback('');
+      setFeedbackValue('');
       
       // Update global state
       addTaskFeedback(task.id, JSON.stringify(newFeedback));
       
       // Add to user context history
       if (typeof addToUserContextHistory === 'function') {
-        const contextUpdate = `[Task Feedback] For task "${task.title}": ${feedback.trim()}`;
+        const contextUpdate = `[Task Feedback] For task "${task.title}": ${feedbackValue.trim()}`;
         addToUserContextHistory(contextUpdate);
       }
       
@@ -369,14 +418,14 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
       e.stopPropagation();
     }
     
-    if (newSubtask.trim()) {
+    if (newSubtaskValue.trim()) {
       try {
         // 创建更新后的子任务数组
         const updatedSubtasks = [
           ...(editedTask.subtasks || []),
           {
             id: `subtask-${Date.now()}`,
-            title: newSubtask.trim(),
+            title: newSubtaskValue.trim(),
             completed: false
           }
         ];
@@ -389,7 +438,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
         
         // 更新本地状态
         setEditedTask(updatedTask);
-        setNewSubtask('');
+        setNewSubtaskValue('');
         setFocusOnNextSubtask(true); // Focus back on input for next subtask
         
         // 更新全局状态 - 使用更新后的任务对象
@@ -633,9 +682,36 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
   };
 
   /**
+   * Toggle task exploratory status
+   */
+  const handleToggleExploratory = () => {
+    setEditedTask({
+      ...editedTask,
+      exploratory: !editedTask.exploratory,
+      upvotes: !editedTask.exploratory && editedTask.upvotes === undefined ? 0 : editedTask.upvotes
+    });
+  };
+
+  /**
+   * Increment upvotes for exploratory task
+   */
+  const handleIncrementUpvotes = () => {
+    setEditedTask({
+      ...editedTask,
+      upvotes: (editedTask.upvotes || 0) + 1
+    });
+  };
+
+  /**
    * Handle saving changes to the task
    */
   const handleSave = () => {
+    // Validate title
+    if (!editedTask.title.trim()) {
+      alert('Task title is required');
+      return;
+    }
+    
     // Add to user context history
     if (typeof addToUserContextHistory === 'function') {
       const contextUpdate = `[Task Update] Updated task "${editedTask.title}"`;
@@ -643,7 +719,11 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
     }
     
     // Update the task
-    onUpdate(editedTask);
+    onUpdate({
+      ...editedTask,
+      // Only include upvotes if task is exploratory
+      upvotes: editedTask.exploratory ? editedTask.upvotes : undefined
+    });
     onClose();
   };
 
@@ -725,6 +805,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 )}
               </div>
               
+              {/* Important toggle */}
               <button
                 className={`p-1.5 rounded-full hover:bg-gray-100 transition-colors ml-2 ${editedTask.important ? 'text-red-500' : 'text-gray-400'}`}
                 onClick={handleToggleImportant}
@@ -739,7 +820,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
             
             {/* Quick actions */}
             <div className="space-y-2 mb-6 border-b border-gray-100 pb-6">
-              {/* Add to My Day */}
+              {/* Add to Today */}
               {editedTask.taskListId !== 'today' && (
                 <button
                   className="flex items-center w-full p-2.5 text-sm text-left hover:bg-gray-50 rounded-md transition-colors"
@@ -1010,8 +1091,8 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     type="text"
                     className="flex-1 bg-transparent border-none py-1 text-sm placeholder-gray-400 focus:outline-none"
                     placeholder="添加步骤"
-                    value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
+                    value={newSubtaskValue}
+                    onChange={(e) => setNewSubtaskValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -1022,7 +1103,7 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
-                  {newSubtask.trim() && (
+                  {newSubtaskValue.trim() && (
                     <button
                       type="button"
                       className="ml-2 p-1 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
@@ -1103,8 +1184,8 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                   type="text"
                   className="flex-1 bg-transparent px-3 py-2 focus:outline-none text-sm"
                   placeholder="添加任务反馈..."
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
+                  value={feedbackValue}
+                  onChange={(e) => setFeedbackValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault(); // 阻止默认行为，防止表单提交
@@ -1115,9 +1196,9 @@ export default function TaskDetail({ task, isOpen, onClose, onUpdate }: TaskDeta
                 <button
                   className="p-2 rounded-full hover:bg-gray-100 transition-colors"
                   onClick={handleSubmitFeedback}
-                  disabled={!feedback.trim()}
+                  disabled={!feedbackValue.trim()}
                 >
-                  <Send size={16} className={`${feedback.trim() ? 'text-blue-500' : 'text-gray-400'}`} />
+                  <Send size={16} className={`${feedbackValue.trim() ? 'text-blue-500' : 'text-gray-400'}`} />
                 </button>
               </div>
               
