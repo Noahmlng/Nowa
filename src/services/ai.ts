@@ -2,7 +2,7 @@
  * AI服务相关功能
  */
 
-import { GoalAnalysis, GoalAnalysisResult } from '../types/goal';
+import { GoalAnalysis, GoalAnalysisResult } from '@/types/goal';
 
 // 重新导出GoalAnalysisResult类型
 export type { GoalAnalysisResult };
