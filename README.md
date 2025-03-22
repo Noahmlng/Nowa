@@ -1,84 +1,114 @@
-# Nowa - AI Todo App
+# Nowa - Your Personal Growth Companion
 
-Nowa is an AI-powered todo app that helps you manage your tasks and goals. It's inspired by Microsoft To-do but with additional AI features for task management and feedback.
+**In an age of information overload, Nowa helps you focus on what truly matters**  
+We're not just another to-do list, but a thinking partner for achieving your personal goals.
 
-## Features
+## Core Features & Use Cases
 
-- **Goal Management**: Create and track long-term goals with progress indicators
-- **Task Management**: Create, edit, and complete tasks with due dates and priorities
-- **Task Feedback**: Add feedback to tasks to track your progress and challenges
-- **Task Organization**: Organize tasks by date and custom lists
-- **Task Details**: Add descriptions, due dates, priorities, and link tasks to goals
+### 1. Goal Decomposition System
+**When you face these challenges:**
+- Setting annual goals without knowing where to start
+- Repeatedly postponing important objectives
+- Failing to connect daily tasks to long-term vision
 
-## Getting Started
+**How Nowa helps you break through:**
+- Automatically breaks large goals into executable phases and milestones
+- Visualizes how your daily tasks contribute to your goals
+- Provides periodic reflection prompts to help adjust your path
 
-### Prerequisites
+### 2. Context-Aware Task Management
+**When you face these challenges:**
+- Handling numerous tasks with difficulty identifying what's truly important
+- Constantly interrupted by urgent but unimportant matters
+- Unable to utilize your peak energy hours effectively
 
-- Node.js (v14 or later)
-- npm or yarn
+**How Nowa helps you break through:**
+- Recommends optimal work periods based on your biological clock and habits
+- Intelligently identifies time-sensitive tasks for priority reminders
+- Reschedules unfinished items intelligently based on importance
 
-### Installation
+### 3. Personal Feedback Loop
+**When you face these challenges:**
+- Repeating the same work patterns while expecting different results
+- Unable to identify which habits are hindering your progress
+- Lacking systematic understanding of your work methods
 
-1. Clone the repository:
-```bash
-git clone https://github.com/diangao/Nowa.git
-cd nowa
-```
+**How Nowa helps you break through:**
+- Guides you through structured task retrospectives
+- Identifies and highlights your productivity patterns and bottlenecks
+- Continuously optimizes task suggestions based on your feedback
 
-2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
-```
+---
 
-3. Start the development server:
-```bash
-npm run dev
-# or
-yarn dev
-```
+# Nowa - 个人成长的智能伙伴
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+**在信息过载的时代，Nowa助你专注真正重要的事**  
+我们不只是另一个待办清单，而是你实现个人目标的思考伙伴。
 
-## Project Structure
+## 核心功能与应用场景
 
+### 1. 目标分解系统
+**当你面临这些挑战时：**
+- 制定了年度计划，却不知从何开始
+- 重要目标一再拖延，无法落实
+- 看不到日常任务与长期目标的联系
+
+**Nowa如何助你突破：**
+- 将大目标自动分解为可执行的阶段和里程碑
+- 可视化展示每日任务对目标的贡献度
+- 提供定期反思提示，帮助调整目标路径
+
+### 2. 情境感知任务管理
+**当你面临这些挑战时：**
+- 每天处理大量任务，难以识别真正重要的事
+- 总是被紧急但不重要的事打断
+- 精力高峰时间未能有效利用
+
+**Nowa如何助你突破：**
+- 根据你的生物钟和习惯推荐最佳工作时段
+- 智能识别时效性任务并优先提醒
+- 未完成事项会根据重要性智能重排
+
+### 3. 个人反馈循环
+**当你面临这些挑战时：**
+- 重复同样的工作模式却期待不同结果
+- 无法识别哪些习惯在阻碍你的进步
+- 缺乏对自己工作方式的系统性了解
+
+**Nowa如何助你突破：**
+- 引导你进行结构化的任务复盘
+- 识别并提示你的生产力模式和瓶颈
+- 根据你的反馈不断优化任务建议
+
+---
+
+## 技术实现
+
+### 项目结构
 ```
 nowa/
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx    # Root layout component
-│   │   ├── page.tsx      # Home page component
-│   │   └── globals.css   # Global styles
-│   ├── components/
-│   │   ├── GoalList.tsx  # Goal list component
-│   │   ├── Sidebar.tsx   # Sidebar navigation component
-│   │   ├── TaskDetail.tsx # Task detail modal component
-│   │   └── TaskList.tsx  # Task list component
-│   └── store/
-│       └── store.ts      # Zustand store for state management
-├── public/              # Static assets
-├── package.json         # Project dependencies
-└── README.md            # Project documentation
+│   ├── app/            # 主应用页面和路由
+│   ├── components/     # 界面组件
+│   │   ├── EnhancedGoalList.tsx   # 目标管理
+│   │   ├── TaskList.tsx          # 任务列表
+│   │   ├── TaskDetail.tsx        # 任务详情
+│   │   ├── Sidebar.tsx           # 侧边导航
+│   │   ├── TaskSuggestions.tsx   # 任务建议
+│   │   └── DailySummary.tsx      # 日常总结
+│   ├── store/          # 状态管理
+│   ├── services/       # 服务和API
+│   ├── types/          # 类型定义
+│   └── utils/          # 工具函数
 ```
 
-## Technologies Used
+### 技术栈
+- **Next.js**: React应用框架
+- **TypeScript**: 类型安全保障
+- **Zustand**: 简洁状态管理
+- **Tailwind CSS**: 高效样式系统
+- **date-fns**: 日期处理工具
 
-- **Next.js**: React framework for server-side rendering and static site generation
-- **TypeScript**: Type-safe JavaScript
-- **Tailwind CSS**: Utility-first CSS framework
-- **Zustand**: State management
-- **date-fns**: Date utility library
-- **Lucide React**: Icon library
+---
 
-## Future Enhancements
-
-- Voice feedback for tasks
-- AI-powered task suggestions and adjustments
-- Daily summary reports
-- Email notifications
-- Integration with external calendars
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+**许可证**: MIT
